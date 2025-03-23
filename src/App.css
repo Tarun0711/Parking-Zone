@@ -1,0 +1,30 @@
+/* #root {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+  text-align: center;
+  
+} */
+/* .background {
+  background-color: #111927;
+  background-image: 
+      radial-gradient(at 47% 33%, hsl(163, 100%, 96%) 0, transparent 59%), 
+      radial-gradient(at 82% 65%, hsl(218.00, 39%, 11%) 0, transparent 55%);
+} */
+.navbar {
+  backdrop-filter: blur(40px) saturate(150%);
+  -webkit-backdrop-filter: blur(14px) saturate(200%);
+  background-color: rgba(255, 255, 255, 0.48);
+  border: 1px solid rgba(0, 0, 0, 0.125);
+  box-shadow: 0 0 10px 0 rgba(0, 0, 0, 0.1);
+}
+.imageParking{
+  background-image: url('./assets/Images/Background.png');
+  width: 100%;
+  height: 100%;
+  background-size: cover;
+  background-position:bottom;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+
+}
