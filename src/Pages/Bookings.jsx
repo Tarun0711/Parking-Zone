@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { Modal } from '@mui/material';
 import axios from 'axios';
 import { toast } from 'react-hot-toast';
-const BASE_URL = 'http://localhost:5000'; 
+const BASE_URL = 'https://parking-zone-backend.onrender.com'; 
 
 const SLOT_RATES = {
   'NORMAL': 10,

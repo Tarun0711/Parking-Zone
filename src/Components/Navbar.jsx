@@ -122,7 +122,15 @@ function Navbar({ onAboutClick, onPricingClick }) {
           ) : (
             <div className="flex items-center gap-4">
             
-              <span className="text-blue-600">{user?.name || "User"}</span>
+        <button
+          onClick={() => {
+            handleLogout();
+          }}
+          className="text-xl text-red-600 shadow-sm bg-gray-200 rounded-xl p-1 hover:text-red-700 transition-all duration-300"
+        >
+           <LogoutIcon />
+        </button>
+     
              
             </div>
           )}
@@ -219,14 +227,9 @@ function Navbar({ onAboutClick, onPricingClick }) {
         </div>
         
       </div>
-      <button
-          onClick={() => {
-            handleLogout();
-          }}
-          className="text-xl text-red-600 fixed bottom-4 right-4 hover:text-red-700 transition-all duration-300"
-        >
-          Logout <LogoutIcon />
-        </button>
+
+      
+      
       {/* Login Modal */}
       <Login
         isOpen={isLoginModalOpen}

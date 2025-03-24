@@ -1,6 +1,6 @@
 import Cookies from 'js-cookie';
 
-const BASE_URL = 'http://localhost:5000/api';
+const BASE_URL = 'https://parking-zone-backend.onrender.com/api';
 
 // Helper function to get auth token
 const getAuthToken = () => {

@@ -17,7 +17,7 @@ function QrVerification() {
     }
 
     if (result) {
-      try {
+      try { 
         const response = await axios.post('/api/parking-sessions/verify-qr', {
           qrCode: result.text,
           action: 'entry' // Will be dynamically determined by the backend

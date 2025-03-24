@@ -14,7 +14,7 @@ function Admin() {
     const fetchParkingSessions = async () => {
         try {
             setLoading(true);
-            const response = await axios.get('http://localhost:5000/api/parking-sessions', {
+            const response = await axios.get('https://parking-zone-backend.onrender.com/api/parking-sessions', {
                 headers: {
                     Authorization: `Bearer ${token}`
                 }
@@ -34,10 +34,10 @@ function Admin() {
             let endpoint = '';
             switch (newStatus) {
                 case 'completed':
-                    endpoint = `http://localhost:5000/api/parking-sessions/${sessionId}/complete`;
+                    endpoint = `https://parking-zone-backend.onrender.com/api/parking-sessions/${sessionId}/complete`;
                     break;
                 case 'cancelled':
-                    endpoint = `http://localhost:5000/api/parking-sessions/${sessionId}/cancel`;
+                    endpoint = `https://parking-zone-backend.onrender.com/api/parking-sessions/${sessionId}/cancel`;
                     break;
                 default:
                     return;
