@@ -615,6 +615,7 @@ function Bookings() {
                         <img
                           src={`${BASE_URL}/uploads/qrcodes/qr-${selectedBooking._id}.png`}
                           alt="Parking QR Code"
+                          crossOrigin='anonymous'
                           className="max-w-[200px]"
                           onError={() => setQrCodeError(true)}
                         />

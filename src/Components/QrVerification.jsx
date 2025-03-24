@@ -1,37 +1,65 @@
-import React, { useState } from 'react';
-import { QrReader } from 'react-qr-reader';
+import React, { useState, useEffect, useRef } from 'react';
+import { useSelector } from 'react-redux';
+import { Html5QrcodeScanner } from 'html5-qrcode';
 import axios from 'axios';
 
 function QrVerification() {
   const [showScanner, setShowScanner] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
-  
-  // Check if user is admin (you'll need to implement this based on your auth system)
-  const isAdmin = true; // Replace with actual admin check
+  const scannerRef = useRef(null);
+  const { token } = useSelector((state) => state.auth);
 
-  const handleScan = async (result, error) => {
-    if (error) {
-      console.warn(`QR Code scanning failed: ${error}`);
-      return;
+  useEffect(() => {
+    if (showScanner) {
+      startScanner();
     }
+    return () => stopScanner();
+  }, [showScanner]);
 
-    if (result) {
-      try { 
-        const response = await axios.post('/api/parking-sessions/verify-qr', {
-          qrCode: result.text,
-          action: 'entry' // Will be dynamically determined by the backend
-        });
-        
-        setSuccess(response.data.message);
-        setShowScanner(false);
-      } catch (err) {
-        setError(err.response?.data?.message || 'Error verifying QR code');
-      }
+  const startScanner = () => {
+    if (!scannerRef.current) {
+      scannerRef.current = new Html5QrcodeScanner('qr-reader', {
+        fps: 10,
+        qrbox: 250,
+      });
+
+      scannerRef.current.render(
+        async (decodedText) => {
+          stopScanner();
+          await verifyQrCode(decodedText);
+        },
+        (errorMessage) => {
+          console.warn('QR Code scanning error:', errorMessage);
+        }
+      );
     }
   };
 
-  if (!isAdmin) {
+  const stopScanner = () => {
+    if (scannerRef.current) {
+      scannerRef.current.clear();
+      scannerRef.current = null;
+    }
+  };
+
+  const verifyQrCode = async (qrCode) => {
+    try {
+      const response = await axios.post(
+        'https://parking-zone-backend.onrender.com/api/parking-sessions/verify-qr',
+        { qrCode, action: 'entry' },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      setSuccess(response.data.message);
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Error verifying QR code');
+      setTimeout(() => setError(null), 3000);
+    }
+  };
+
+  if (!token) {
     return null;
   }
 
@@ -41,11 +69,7 @@ function QrVerification() {
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
           <div className="bg-white p-4 rounded-lg w-full max-w-md">
             <h2 className="text-xl font-bold mb-4">Scan QR Code</h2>
-            <QrReader
-              onResult={handleScan}
-              constraints={{ facingMode: 'environment' }}
-              className="w-full"
-            />
+            <div id="qr-reader" className="w-full"></div>
             <button
               onClick={() => setShowScanner(false)}
               className="mt-4 bg-red-500 text-white px-4 py-2 rounded"
@@ -69,9 +93,7 @@ function QrVerification() {
       )}
 
       <button
-        onClick={() => {
-          setShowScanner(true);
-        }}
+        onClick={() => setShowScanner(true)}
         className="fixed bottom-4 right-4 bg-blue-500 text-white px-6 py-3 rounded-full shadow-lg hover:bg-blue-600 transition-colors"
       >
         Verify QR Code
