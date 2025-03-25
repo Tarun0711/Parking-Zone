@@ -2,11 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useSelector } from 'react-redux';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import axios from 'axios';
+import {toast} from 'react-hot-toast';
 
 function QrVerification() {
   const [showScanner, setShowScanner] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+  const [showAnimation, setShowAnimation] = useState(false);
   const scannerRef = useRef(null);
   const { token } = useSelector((state) => state.auth);
 
@@ -46,16 +48,31 @@ function QrVerification() {
   const verifyQrCode = async (qrCode) => {
     try {
       const response = await axios.post(
-        'https://parking-zone-backend.onrender.com/api/parking-sessions/verify-qr',
+        'http://localhost:5000/api/parking-sessions/verify-qr',
         { qrCode, action: 'entry' },
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
-      setSuccess(response.data.message);
-      setTimeout(() => setSuccess(null), 3000);
+      // First close the scanner modal
+      setShowScanner(false);
+      
+      toast.success(response.data.message);
+      // Wait a brief moment before showing the success animation
+      setTimeout(() => {
+        setSuccess(response.data.message);
+        setShowAnimation(true);
+        
+        // Hide the animation after 3 seconds
+        setTimeout(() => {
+          setSuccess(null);
+          setShowAnimation(false);
+        }, 3000);
+      }, 300); // 300ms delay before showing animation
     } catch (err) {
-      setError(err.response?.data?.message || 'Error verifying QR code');
-      setTimeout(() => setError(null), 3000);
+      // setError(err.response?.data?.message || 'Error verifying QR code');
+      setShowScanner(false);
+      toast.error(err.response?.data?.message || 'Error verifying QR code');
+
     }
   };
 
@@ -86,9 +103,17 @@ function QrVerification() {
         </div>
       )}
 
-      {success && (
-        <div className="fixed top-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-2 rounded">
-          {success}
+      {showAnimation && (
+        <div className="fixed inset-0 bg-white flex items-center justify-center z-50">
+          <div className="success-animation">
+            <div className="checkmark">
+              <svg className="checkmark-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
+                <circle className="checkmark-circle" cx="26" cy="26" r="25" fill="none"/>
+                <path className="checkmark-check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/>
+              </svg>
+            </div>
+            <div className="success-text">{success}</div>
+          </div>
         </div>
       )}
 
@@ -98,6 +123,71 @@ function QrVerification() {
       >
         Verify QR Code
       </button>
+
+      <style jsx>{`
+        .success-animation {
+          text-align: center;
+        }
+
+        .checkmark {
+          width: 80px;
+          height: 80px;
+          margin: 0 auto;
+          animation: scale-in 0.5s ease-out;
+        }
+
+        .checkmark-circle {
+          stroke: #4CAF50;
+          stroke-width: 2;
+          stroke-dasharray: 166;
+          stroke-dashoffset: 166;
+          animation: stroke 0.6s cubic-bezier(0.65, 0, 0.45, 1) forwards;
+        }
+
+        .checkmark-check {
+          stroke: #4CAF50;
+          stroke-width: 2;
+          stroke-dasharray: 48;
+          stroke-dashoffset: 48;
+          animation: stroke 0.3s cubic-bezier(0.65, 0, 0.45, 1) 0.6s forwards;
+        }
+
+        .success-text {
+          margin-top: 20px;
+          color: #4CAF50;
+          font-size: 1.2rem;
+          font-weight: bold;
+          animation: fade-in 0.5s ease-out;
+        }
+
+        @keyframes stroke {
+          100% {
+            stroke-dashoffset: 0;
+          }
+        }
+
+        @keyframes scale-in {
+          0% {
+            transform: scale(0);
+            opacity: 0;
+          }
+          100% {
+            transform: scale(1);
+            opacity: 1;
+          }
+        }
+
+        @keyframes fade-in {
+          0% {
+            opacity: 0;
+            transform: translateY(-10px);
+          }
+          100% {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      `}</style>
     </>
   );
 }

@@ -8,13 +8,20 @@ function Admin() {
     const [totalRevenue, setTotalRevenue] = useState(0);
     const [parkingSessions, setParkingSessions] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [blockData, setBlockData] = useState({
+        blockName: '',
+        blockDescription: '',
+        floor: '',
+        totalSlots: ''
+    });
     const { token } = useSelector((state) => state.auth);
 
     // Fetch parking sessions
     const fetchParkingSessions = async () => {
         try {
             setLoading(true);
-            const response = await axios.get('https://parking-zone-backend.onrender.com/api/parking-sessions', {
+            const response = await axios.get('http://localhost:5000/api/parking-sessions', {
                 headers: {
                     Authorization: `Bearer ${token}`
                 }
@@ -34,10 +41,10 @@ function Admin() {
             let endpoint = '';
             switch (newStatus) {
                 case 'completed':
-                    endpoint = `https://parking-zone-backend.onrender.com/api/parking-sessions/${sessionId}/complete`;
+                    endpoint = `http://localhost:5000/api/parking-sessions/${sessionId}/complete`;
                     break;
                 case 'cancelled':
-                    endpoint = `https://parking-zone-backend.onrender.com/api/parking-sessions/${sessionId}/cancel`;
+                    endpoint = `http://localhost:5000/api/parking-sessions/${sessionId}/cancel`;
                     break;
                 default:
                     return;
@@ -54,6 +61,27 @@ function Admin() {
         }
     };
 
+    // Handle block creation
+    const handleCreateBlock = async (e) => {
+        e.preventDefault();
+        try {
+            await axios.post('http://localhost:5000/api/blocks/', blockData, {
+                headers: {
+                    Authorization: `Bearer ${token}`
+                }
+            });
+            setIsModalOpen(false);
+            setBlockData({
+                blockName: '',
+                blockDescription: '',
+                floor: '',
+                totalSlots: ''
+            });
+        } catch (error) {
+            console.error('Error creating parking block:', error);
+        }
+    };
+
     useEffect(() => {
         fetchParkingSessions();
     }, []);
@@ -62,9 +90,92 @@ function Admin() {
         <div
         className='min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 py-24 px-4 sm:px-6 lg:px-8'
         >
-            <h1 className='text-4xl font-bold text-gray-900 mb-12 relative inline-block'>
-                Admin Panel
-            </h1>
+            <div className='flex justify-between items-center mb-8'>
+                <h1 className='text-4xl font-bold text-gray-900 relative inline-block'>
+                    Admin Panel
+                </h1>
+                <button
+                    onClick={() => setIsModalOpen(true)}
+                    className='bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 transition-colors'
+                >
+                    Add Parking Slots
+                </button>
+            </div>
+
+            {/* Modal */}
+            {isModalOpen && (
+                <div className='fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50'>
+                    <div className='bg-white p-6 rounded-lg w-full max-w-md'>
+                        <h2 className='text-2xl font-bold mb-4'>Add New Parking Block</h2>
+                        <form onSubmit={handleCreateBlock}>
+                            <div className='mb-4'>
+                                <label className='block text-gray-700 text-sm font-bold mb-2'>
+                                    Block Name
+                                </label>
+                                <input
+                                    type='text'
+                                    value={blockData.blockName}
+                                    onChange={(e) => setBlockData({...blockData, blockName: e.target.value})}
+                                    className='w-full px-3 py-2 border rounded-md'
+                                    required
+                                />
+                            </div>
+                            <div className='mb-4'>
+                                <label className='block text-gray-700 text-sm font-bold mb-2'>
+                                    Block Description
+                                </label>
+                                <input
+                                    type='text'
+                                    value={blockData.blockDescription}
+                                    onChange={(e) => setBlockData({...blockData, blockDescription: e.target.value})}
+                                    className='w-full px-3 py-2 border rounded-md'
+                                    required
+                                />
+                            </div>
+                            <div className='mb-4'>
+                                <label className='block text-gray-700 text-sm font-bold mb-2'>
+                                    Floor
+                                </label>
+                                <input
+                                    type='number'
+                                    value={blockData.floor}
+                                    onChange={(e) => setBlockData({...blockData, floor: e.target.value})}
+                                    className='w-full px-3 py-2 border rounded-md'
+                                    required
+                                />
+                            </div>
+                            <div className='mb-4'>
+                                <label className='block text-gray-700 text-sm font-bold mb-2'>
+                                    Total Slots
+                                </label>
+                                <input
+                                    type='number'
+                                    value={blockData.totalSlots}
+                                    onChange={(e) => setBlockData({...blockData, totalSlots: e.target.value})}
+                                    className='w-full px-3 py-2 border rounded-md'
+                                    required
+                                />
+                            </div>
+                            <div className='flex justify-end space-x-2'>
+                                <button
+                                    type='button'
+                                    onClick={() => setIsModalOpen(false)}
+                                    className='px-4 py-2 text-gray-600 hover:text-gray-800'
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type='submit'
+                                    className='px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600'
+                                >
+                                    Create Block
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
             <div className='max-w-7xl mx-auto'>
                 <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6'>
                     <div className='bg-white p-6 rounded-lg shadow-md'>

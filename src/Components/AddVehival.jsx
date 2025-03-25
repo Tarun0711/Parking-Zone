@@ -70,7 +70,7 @@ function AddVehival() {
         owner: user.id
       };
 
-      const response = await axios.post(`https://parking-zone-backend.onrender.com/api/vehicles`, vehicleData, {
+      const response = await axios.post(`http://localhost:5000/api/vehicles`, vehicleData, {
         headers: {
           Authorization: `Bearer ${token}`
         }

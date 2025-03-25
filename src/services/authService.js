@@ -1,7 +1,7 @@
 import { authenticatedFetch } from './api';
 import Cookies from 'js-cookie';
 
-const BASE_URL = 'https://parking-zone-backend.onrender.com/api';
+const BASE_URL = 'http://localhost:5000/api';
 
 export const authService = {
     login: async (credentials) => {

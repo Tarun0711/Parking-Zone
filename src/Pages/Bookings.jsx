@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { Modal } from '@mui/material';
 import axios from 'axios';
 import { toast } from 'react-hot-toast';
-const BASE_URL = 'https://parking-zone-backend.onrender.com'; 
+const BASE_URL = 'http://localhost:5000'; 
 
 const SLOT_RATES = {
   'NORMAL': 10,
@@ -208,7 +208,6 @@ function Bookings() {
       
      toast.success('Booking successful!');
       
-      // Refresh available slots
       const slotsResponse = await axios.get(`${BASE_URL}/api/parking-slots`, {
         headers: {
           'Authorization': `Bearer ${token}`
@@ -613,7 +612,7 @@ function Bookings() {
                         </div>
                       ) : (
                         <img
-                          src={`${BASE_URL}/uploads/qrcodes/qr-${selectedBooking._id}.png`}
+                          src={selectedBooking.qrCodeUrl}
                           alt="Parking QR Code"
                           crossOrigin='anonymous'
                           className="max-w-[200px]"
