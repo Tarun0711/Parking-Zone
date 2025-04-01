@@ -44,9 +44,14 @@ function Navbar({ onAboutClick, onPricingClick }) {
   const handleLinkClick = (linkName) => {
     setIsOpen(false);
     if (linkName === "About") {
-      onAboutClick();
+      const aboutSection = document.getElementById('about');
+      aboutSection?.scrollIntoView({ behavior: 'smooth' });
     } else if (linkName === "Pricing") {
-      onPricingClick();
+      const pricingSection = document.getElementById('pricing');
+      pricingSection?.scrollIntoView({ behavior: 'smooth' });
+    } else if (linkName === "Home") {
+      const homeSection = document.getElementById('home');
+      homeSection?.scrollIntoView({ behavior: 'smooth' });
     }
   };
 
@@ -75,13 +80,13 @@ function Navbar({ onAboutClick, onPricingClick }) {
         {/* Desktop Navigation */}
         <div className="hidden md:flex gap-4 items-center">
           {links.map((link, index) => (
-            <Link
+            <button
               key={index}
-              to={link.path}
+              onClick={() => handleLinkClick(link.name)}
               className="hover:text-blue-500 transition-all duration-300 hover:scale-105"
             >
               {link.name}
-            </Link>
+            </button>
           ))}
           {isAuthenticated && (
             <>

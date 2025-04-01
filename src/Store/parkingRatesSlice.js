@@ -6,7 +6,7 @@ export const fetchParkingRates = createAsyncThunk(
     async (_, { rejectWithValue }) => {
         try {
             const response = await parkingRateService.getAllParkingRates();
-            return response.data;
+            return response.data.data;
         } catch (error) {
             return rejectWithValue(error.message);
         }
@@ -29,7 +29,7 @@ const parkingRatesSlice = createSlice({
             })
             .addCase(fetchParkingRates.fulfilled, (state, action) => {
                 state.loading = false;
-                state.rates = Array.isArray(action.payload) ? action.payload : [];
+                state.rates = action.payload;
             })
             .addCase(fetchParkingRates.rejected, (state, action) => {
                 state.loading = false;

@@ -16,10 +16,10 @@ function Dashboard() {
     <div className='w-full h-auto overflow-auto bg-white'>
         <Navbar onAboutClick={() => scrollToSection(howItWorksRef)} onPricingClick={() => scrollToSection(pricingRef)} />
         <Home />
-        <div ref={howItWorksRef}>
+        <div id="about" ref={howItWorksRef}>
           <HowItWorks />
         </div>
-        <div ref={pricingRef}>
+        <div id="pricing" ref={pricingRef}>
           <Pricing />
         </div>
     </div>

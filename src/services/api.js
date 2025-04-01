@@ -1,4 +1,5 @@
 import Cookies from 'js-cookie';
+import axios from 'axios';
 
 // const BASE_URL = 'http://localhost:5000/api';
 const BASE_URL = 'http://localhost:5000/api'; 
@@ -72,31 +73,32 @@ export const parkingSessionService = {
 
 // Parking rate related API calls
 export const parkingRateService = {
-    getAllParkingRates: async () => {
-        return authenticatedFetch('/parking-rates');
-    },
-
-    getParkingRateById: async (id) => {
-        return authenticatedFetch(`/parking-rates/${id}`);
-    },
-
-    createParkingRate: async (rateData) => {
-        return authenticatedFetch('/parking-rates', {
-            method: 'POST',
-            body: JSON.stringify(rateData)
+    getAllParkingRates: () => {
+        return axios.get(`${BASE_URL}/parking-rates`, {
+            headers: {
+                'Authorization': `Bearer ${getAuthToken()}`
+            }
         });
     },
-
-    updateParkingRate: async (id, rateData) => {
-        return authenticatedFetch(`/parking-rates/${id}`, {
-            method: 'PUT',
-            body: JSON.stringify(rateData)
+    createParkingRate: (data) => {
+        return axios.post(`${BASE_URL}/parking-rates`, data, {
+            headers: {
+                'Authorization': `Bearer ${getAuthToken()}`
+            }
         });
     },
-
-    deleteParkingRate: async (id) => {
-        return authenticatedFetch(`/parking-rates/${id}`, {
-            method: 'DELETE'
+    updateParkingRate: (id, data) => {
+        return axios.put(`${BASE_URL}/parking-rates/${id}`, data, {
+            headers: {
+                'Authorization': `Bearer ${getAuthToken()}`
+            }
+        });
+    },
+    deleteParkingRate: (id) => {
+        return axios.delete(`${BASE_URL}/parking-rates/${id}`, {
+            headers: {
+                'Authorization': `Bearer ${getAuthToken()}`
+            }
         });
     }
 };

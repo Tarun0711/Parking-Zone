@@ -1,17 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { parkingSessionService } from '../services/api';
-import { useSelector } from 'react-redux';
+import { parkingSessionService, parkingRateService } from '../services/api';
+import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
-import { Modal } from '@mui/material';
+import { Modal, TextField, Button, Select, MenuItem, FormControl, InputLabel } from '@mui/material';
 import axios from 'axios';
 import { toast } from 'react-hot-toast';
+import { fetchParkingRates } from '../Store/parkingRatesSlice';
 const BASE_URL = 'http://localhost:5000'; 
-
-const SLOT_RATES = {
-  'NORMAL': 10,
-  'VIP': 20,
-  'VVIP': 30
-};
 
 const styles = `
   @keyframes glow {
@@ -103,6 +98,28 @@ function Bookings() {
   // New state variable for QR code error
   const [qrCodeError, setQrCodeError] = useState(false);
   
+  // New state variables for pricing modal
+  const [isPricingModalOpen, setIsPricingModalOpen] = useState(false);
+  const [editingRate, setEditingRate] = useState(null);
+  const [newRate, setNewRate] = useState({
+    type: '',
+    hourlyRate: '',
+    description: ''
+  });
+  const dispatch = useDispatch();
+  const isAdmin = user?.role === 'admin';
+
+  // Get parking rates from Redux store
+  const { rates: parkingRates, loading: ratesLoading } = useSelector((state) => state.parkingRates);
+
+  // Create a map of rates for easy access
+  const ratesMap = React.useMemo(() => {
+    return parkingRates.reduce((acc, rate) => {
+      acc[rate.type] = rate.hourlyRate;
+      return acc;
+    }, {});
+  }, [parkingRates]);
+
   // Add useEffect to fetch bookings on component mount
   useEffect(() => {
     fetchBookings();
@@ -308,11 +325,77 @@ function Bookings() {
           >
             <span className="text-sm font-semibold">{slot.slotNumber}</span>
             <span className="text-xs text-gray-500">{slot.rateType}</span>
-            <span className="text-xs text-gray-500">₹{SLOT_RATES[slot.rateType] || '-'}</span>
+            <span className="text-xs text-gray-500">₹{ratesMap[slot.rateType] || '-'}/hour</span>
           </button>
         ))}
       </div>
     );
+  };
+
+  // Update the useEffect for fetching rates
+  useEffect(() => {
+    if (isAdmin) {
+      dispatch(fetchParkingRates());
+    }
+  }, [dispatch, isAdmin]);
+
+  // Add handler for pricing modal
+  const handlePricingModalOpen = () => {
+    setIsPricingModalOpen(true);
+    setEditingRate(null);
+    setNewRate({
+      type: '',
+      hourlyRate: '',
+      description: ''
+    });
+  };
+
+  const handlePricingModalClose = () => {
+    setIsPricingModalOpen(false);
+    setEditingRate(null);
+    setNewRate({
+      type: '',
+      hourlyRate: '',
+      description: ''
+    });
+  };
+
+  // Add handler for creating/updating parking rate
+  const handleSaveParkingRate = async (e) => {
+    e.preventDefault();
+    try {
+      await parkingRateService.updateParkingRate(editingRate._id, newRate);
+      toast.success('Parking rate updated successfully');
+      dispatch(fetchParkingRates());
+      handlePricingModalClose();
+    } catch (error) {
+      console.error('Error saving parking rate:', error);
+      toast.error(error.response?.data?.message || 'Failed to save parking rate');
+    }
+  };
+
+  // Add handler for editing parking rate
+  const handleEditRate = (rate) => {
+    setEditingRate(rate);
+    setNewRate({
+      type: rate.type,
+      hourlyRate: rate.hourlyRate,
+      description: rate.description
+    });
+  };
+
+  // Add handler for deleting parking rate
+  const handleDeleteRate = async (rateId) => {
+    if (window.confirm('Are you sure you want to delete this parking rate?')) {
+      try {
+        await parkingRateService.deleteParkingRate(rateId);
+        toast.success('Parking rate deleted successfully');
+        dispatch(fetchParkingRates());
+      } catch (error) {
+        console.error('Error deleting parking rate:', error);
+        toast.error(error.response?.data?.message || 'Failed to delete parking rate');
+      }
+    }
   };
 
   if (loading) {
@@ -328,10 +411,24 @@ function Bookings() {
       <style>{styles}</style>
       
       <div className="max-w-7xl mx-auto">
-        <h1 className="text-4xl font-bold text-gray-900 mb-12 relative inline-block">
-          My Bookings
-          <div className="absolute -bottom-2 left-0 w-1/3 h-1 bg-blue-400 rounded-full"></div>
-        </h1>
+        <div className="flex justify-between items-center mb-12">
+          <h1 className="text-4xl font-bold text-gray-900 relative inline-block">
+            My Bookings
+            <div className="absolute -bottom-2 left-0 w-1/3 h-1 bg-blue-400 rounded-full"></div>
+          </h1>
+          
+          {isAdmin && (
+            <button
+              onClick={handlePricingModalOpen}
+              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-all duration-200 flex items-center space-x-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+              <span>Manage Pricing</span>
+            </button>
+          )}
+        </div>
 
         {/* New Booking Section */}
         <div className="mb-12 bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm p-6 border border-blue-100">
@@ -442,14 +539,7 @@ function Bookings() {
             <p className="text-xl text-gray-600 mb-8">
               You haven't booked any parking slots yet.
             </p>
-            <button 
-              onClick={() => navigate('/book')}
-              className="px-8 py-3 bg-blue-500 text-white text-lg font-medium rounded-lg
-                hover:bg-blue-600 transform hover:-translate-y-0.5 transition-all duration-200
-                focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2"
-            >
-              Book a Slot
-            </button>
+            
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -624,6 +714,136 @@ function Bookings() {
                 )}
               </div>
             )}
+          </div>
+        </Modal>
+
+        {/* Pricing Management Modal */}
+        <Modal
+          open={isPricingModalOpen}
+          onClose={handlePricingModalClose}
+          className="flex items-center justify-center p-4"
+        >
+          <div className="bg-white rounded-lg p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-gray-900">
+                Edit Parking Rate
+              </h2>
+              <button
+                onClick={handlePricingModalClose}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {editingRate ? (
+              <form onSubmit={handleSaveParkingRate} className="space-y-6">
+                <FormControl fullWidth>
+                  <InputLabel>Rate Type</InputLabel>
+                  <Select
+                    value={newRate.type}
+                    onChange={(e) => setNewRate({ ...newRate, type: e.target.value })}
+                    label="Rate Type"
+                    required
+                    disabled
+                  >
+                    <MenuItem value="NORMAL">Normal</MenuItem>
+                    <MenuItem value="VIP">VIP</MenuItem>
+                    <MenuItem value="VVIP">VVIP</MenuItem>
+                  </Select>
+                </FormControl>
+
+                <TextField
+                  fullWidth
+                  label="Hourly Rate"
+                  type="number"
+                  value={newRate.hourlyRate}
+                  onChange={(e) => setNewRate({ ...newRate, hourlyRate: e.target.value })}
+                  required
+                  inputProps={{ min: 0 }}
+                />
+
+                <TextField
+                  fullWidth
+                  label="Description"
+                  multiline
+                  rows={3}
+                  value={newRate.description}
+                  onChange={(e) => setNewRate({ ...newRate, description: e.target.value })}
+                />
+
+                <div className="flex justify-end space-x-4">
+                  <Button
+                    variant="outlined"
+                    onClick={handlePricingModalClose}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    variant="contained"
+                    color="primary"
+                    disabled={!newRate.hourlyRate}
+                  >
+                    Update Rate
+                  </Button>
+                </div>
+              </form>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                Select a rate to edit from the list below
+              </div>
+            )}
+
+            {/* List of existing rates */}
+            <div className="mt-8">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Current Rates</h3>
+              {ratesLoading ? (
+                <div className="flex justify-center items-center py-4">
+                  <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                </div>
+              ) : parkingRates && parkingRates.length > 0 ? (
+                <div className="space-y-4">
+                  {parkingRates.map((rate) => (
+                    <div
+                      key={rate._id}
+                      className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
+                    >
+                      <div>
+                        <h4 className="font-medium text-gray-900">{rate.type}</h4>
+                        <p className="text-sm text-gray-500">₹{rate.hourlyRate}/hour</p>
+                        {rate.description && (
+                          <p className="text-sm text-gray-600 mt-1">{rate.description}</p>
+                        )}
+                      </div>
+                      <div className="flex space-x-2">
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          onClick={() => handleEditRate(rate)}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          variant="outlined"
+                          color="error"
+                          size="small"
+                          onClick={() => handleDeleteRate(rate._id)}
+                        >
+                          Delete
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-4 text-gray-500">
+                  No parking rates found.
+                </div>
+              )}
+            </div>
           </div>
         </Modal>
       </div>

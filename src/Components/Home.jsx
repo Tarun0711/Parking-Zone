@@ -2,8 +2,14 @@ import React from "react";
 import AddVehival from "./AddVehival";
 import { useInView } from "react-intersection-observer";
 import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
+import { useSelector } from "react-redux";
+import Login from "./Login";
 
 function Home() {
+  const { isAuthenticated } = useSelector((state) => state.auth);
+  const navigate = useNavigate();
+  const [showLogin, setShowLogin] = React.useState(false);
   const [heroRef, heroInView] = useInView({
     triggerOnce: true,
     threshold: 0.2
@@ -14,8 +20,16 @@ function Home() {
     threshold: 0.2
   });
 
+  const handleGetStarted = () => {
+    if (isAuthenticated) {
+      navigate('/bookings');
+    } else {
+      setShowLogin(true);
+    }
+  };
+
   return (
-    <div className="relative min-h-screen bg-gradient-to-br overflow-hidden from-gray-50 to-gray-100">
+    <div id="home" className="relative min-h-screen bg-gradient-to-br overflow-hidden from-gray-50 to-gray-100">
       {/* Background elements */}
       <div className="absolute top-[-10%] left-[-10%] w-[600px] h-[600px] rounded-full bg-blue-400/20 blur-3xl animate-pulse"></div>
       <div className="absolute bottom-[-15%] right-[-15%] w-[600px] h-[600px] rounded-full bg-pink-400/20 blur-3xl animate-pulse"></div>
@@ -48,17 +62,12 @@ function Home() {
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
+                  onClick={handleGetStarted}
                   className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all duration-200 shadow-lg hover:shadow-xl"
                 >
                   Get Started
                 </motion.button>
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  className="px-6 py-3 border-2 border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 transition-all duration-200"
-                >
-                  Learn More
-                </motion.button>
+                
               </div>
             </motion.div>
 
@@ -77,6 +86,7 @@ function Home() {
           </div>
         </main>
       </div>
+      <Login isOpen={showLogin} onClose={() => setShowLogin(false)} />
     </div>
   );
 }
