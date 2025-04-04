@@ -7,46 +7,23 @@ import { loginSuccess, setLoading } from '../Store/authSlice';
 import EmailVerificationModal from './EmailVerificationModal';
 
 export default function Login({ isOpen, onClose }) {
-  const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-  });
+  const [formData, setFormData] = useState({ email: '', password: '' });
   const [showVerification, setShowVerification] = useState(false);
+  const [errorMessage, setErrorMessage] = useState(''); // <-- Error message state
+
   const dispatch = useDispatch();
   const { loading } = useSelector((state) => state.auth);
 
   const resetForm = () => {
-    setFormData({
-      email: '',
-      password: '',
-    });
+    setFormData({ email: '', password: '' });
+    setErrorMessage(''); // Clear error on reset
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     dispatch(setLoading(true));
-    
-    try {
-      const response = await authService.login(formData);
-      console.log(formData)
-      dispatch(loginSuccess(response));
-      console.log('Login response:', response);
-      toast.success('Successfully logged in!');
-      resetForm();
-      onClose();
-    } catch (error) {
-      if (error.message.includes('Please verify your email before logging in')) {
-        setShowVerification(true);
-      } else {
-        toast.error(error.message || 'Login failed');
-      }
-      dispatch(setLoading(false));
-    } 
-  };
+    setErrorMessage(''); // Reset error before making request
 
-  const handleVerificationSuccess = async () => {
-    setShowVerification(false);
-    // Try logging in again after verification
     try {
       const response = await authService.login(formData);
       dispatch(loginSuccess(response));
@@ -54,13 +31,22 @@ export default function Login({ isOpen, onClose }) {
       resetForm();
       onClose();
     } catch (error) {
-      toast.error(error.message || 'Login failed');
+      const errorMsg = error.error || error.message;
+      if (errorMsg.includes('Please verify your email')) {
+        setShowVerification(true);
+      } else if (errorMsg.includes('Invalid credentials')) {
+        setErrorMessage('Invalid email or password.');
+        toast.error('Invalid email or password');
+      } else if (errorMsg.includes('User not found')) {
+        setErrorMessage('User not found.');
+        toast.error('User not found');
+      } else {
+        setErrorMessage(errorMsg || 'Login failed.');
+        toast.error(errorMsg || 'Login failed');
+      }
+    } finally {
       dispatch(setLoading(false));
     }
-  };
-
-  const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
   return (
@@ -76,7 +62,7 @@ export default function Login({ isOpen, onClose }) {
               onClick={onClose}
               className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50"
             />
-            
+
             {/* Modal */}
             <motion.div
               initial={{ y: "100%", opacity: 0 }}
@@ -103,15 +89,12 @@ export default function Login({ isOpen, onClose }) {
 
                 <form onSubmit={handleSubmit} className="space-y-6">
                   <div className="space-y-2">
-                    <motion.div
-                      whileTap={{ scale: 0.98 }}
-                      className="relative"
-                    >
+                    <motion.div whileTap={{ scale: 0.98 }} className="relative">
                       <input
                         type="email"
                         name="email"
                         value={formData.email}
-                        onChange={handleChange}
+                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                         autoComplete="off"
                         placeholder="Email"
                         className="w-full px-4 py-3 bg-white/40 rounded-lg outline-none border border-white/40 focus:border-blue-500 transition-all duration-300 placeholder:text-gray-500"
@@ -121,22 +104,21 @@ export default function Login({ isOpen, onClose }) {
                   </div>
 
                   <div className="space-y-2">
-                    <motion.div
-                      whileTap={{ scale: 0.98 }}
-                      className="relative"
-                    >
+                    <motion.div whileTap={{ scale: 0.98 }} className="relative">
                       <input
                         type="password"
                         name="password"
                         value={formData.password}
+                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                         autoComplete="off"
-                        onChange={handleChange}
                         placeholder="Password"
                         className="w-full px-4 py-3 bg-white/40 rounded-lg outline-none border border-white/40 focus:border-blue-500 transition-all duration-300 placeholder:text-gray-500"
                         required
                       />
                     </motion.div>
                   </div>
+
+                  
 
                   <motion.button
                     whileHover={{ scale: 1.02 }}
@@ -149,7 +131,14 @@ export default function Login({ isOpen, onClose }) {
                   </motion.button>
 
                   <div className="text-center text-sm">
-                    <a href="#" className="text-blue-600 hover:underline">Forgot Password?</a>
+                    {/* Error Message */}
+                  {errorMessage && (
+                    <div
+                      className="mt-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm"
+                    >
+                      {errorMessage}
+                    </div>
+                  )}
                   </div>
                 </form>
               </div>
@@ -163,7 +152,25 @@ export default function Login({ isOpen, onClose }) {
         isOpen={showVerification}
         onClose={() => setShowVerification(false)}
         email={formData.email}
-        onVerificationSuccess={handleVerificationSuccess}
+        onVerificationSuccess={async () => {
+          setShowVerification(false);
+          dispatch(setLoading(true));
+          setErrorMessage(''); // Clear error before retry
+
+          try {
+            const response = await authService.login(formData);
+            dispatch(loginSuccess(response));
+            toast.success('Successfully logged in!');
+            resetForm();
+            onClose();
+          } catch (error) {
+            const errorMsg = error.error || error.message;
+            setErrorMessage(errorMsg || 'Login failed.');
+            toast.error(errorMsg || 'Login failed');
+          } finally {
+            dispatch(setLoading(false));
+          }
+        }}
       />
     </>
   );
