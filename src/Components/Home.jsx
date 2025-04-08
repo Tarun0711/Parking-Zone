@@ -74,7 +74,7 @@ function Home() {
               </div>
             </motion.div>
             
-            {user && user.role !== "admin" && (
+            {(!user || (user && user.role !== "admin")) && (
               /* Form Section */
               <motion.div
                 ref={formRef}

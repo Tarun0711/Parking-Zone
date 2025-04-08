@@ -104,7 +104,7 @@ function Bookings() {
   const [editingRate, setEditingRate] = useState(null);
   const [newRate, setNewRate] = useState({
     type: '',
-    vehicleType: 'car', // Default to car
+    vehicleType: '', // Default to empty to create a base rate
     hourlyRate: '',
     description: ''
   });
@@ -117,11 +117,30 @@ function Bookings() {
   // Create a map of rates for easy access
   const ratesMap = React.useMemo(() => {
     const map = {};
-    parkingRates.forEach(rate => {
-      // Create a key that includes both type and vehicleType
-      const key = `${rate.type}_${rate.vehicleType || 'car'}`;
-      map[key] = rate.hourlyRate;
-    });
+    if (parkingRates && parkingRates.length > 0) {
+      parkingRates.forEach(rate => {
+        // Create a key that includes both type and vehicleType
+        const key = `${rate.type}_${rate.vehicleType || 'car'}`;
+        
+        // Apply tiered pricing based on vehicle type
+        let hourlyRate = rate.hourlyRate;
+        
+        // If the rate doesn't specify a vehicle type, apply the tiered pricing
+        if (!rate.vehicleType) {
+          // For trucks, use the base rate (100%)
+          map[`${rate.type}_truck`] = hourlyRate;
+          
+          // For cars, use 90% of the truck rate (10% less than truck)
+          map[`${rate.type}_car`] = hourlyRate * 0.9;
+          
+          // For bikes, use 80% of the truck rate (20% less than truck)
+          map[`${rate.type}_bike`] = hourlyRate * 0.8;
+        } else {
+          // If the rate already has a vehicle type, use it as is
+          map[key] = hourlyRate;
+        }
+      });
+    }
     return map;
   }, [parkingRates]);
 
@@ -155,7 +174,7 @@ function Bookings() {
   const organizeSlots = (slots) => {
     const organized = {
       car: {},
-      motorcycle: {},
+      bike: {},
       truck: {}
     };
     
@@ -163,17 +182,8 @@ function Bookings() {
       const blockId = slot.block._id;
       const floor = slot.floor;
       
-      // Determine vehicle type based on slot type
-      // For this implementation, we'll assume:
-      // - 'standard' and 'vip' slots are for cars
-      // - 'electric' slots are for motorcycles
-      // - 'handicapped' slots are for trucks (or you can adjust based on your needs)
-      let vehicleType = 'car';
-      if (slot.type === 'electric') {
-        vehicleType = 'motorcycle';
-      } else if (slot.type === 'handicapped') {
-        vehicleType = 'truck';
-      }
+      // Use the vehicleType from the slot directly
+      const vehicleType = slot.vehicleType || 'car';
       
       if (!organized[vehicleType][blockId]) {
         organized[vehicleType][blockId] = {
@@ -228,13 +238,8 @@ function Bookings() {
     const selectedVehicleObj = vehicles.find(v => v._id === selectedVehicle);
     const selectedSlotObj = availableSlots.find(s => s._id === selectedSlot);
     
-    // Determine if the slot is for motorcycles, trucks, or cars
-    let slotVehicleType = 'car';
-    if (selectedSlotObj.type === 'electric') {
-      slotVehicleType = 'motorcycle';
-    } else if (selectedSlotObj.type === 'handicapped') {
-      slotVehicleType = 'truck';
-    }
+    // Use the vehicleType from the slot directly
+    const slotVehicleType = selectedSlotObj.vehicleType || 'car';
     
     if (selectedVehicleObj.vehicleType !== slotVehicleType) {
       setBookingError(`This slot is for ${slotVehicleType}s, but you selected a ${selectedVehicleObj.vehicleType}`);
@@ -360,13 +365,8 @@ function Bookings() {
     return (
       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4">
         {slots.map((slot) => {
-          // Determine the vehicle type for this slot
-          let slotVehicleType = 'car';
-          if (slot.type === 'electric') {
-            slotVehicleType = 'motorcycle';
-          } else if (slot.type === 'handicapped') {
-            slotVehicleType = 'truck';
-          }
+          // Use the vehicleType from the slot directly
+          const slotVehicleType = slot.vehicleType || 'car';
           
           // Create the rate key
           const rateKey = `${slot.rateType}_${slotVehicleType}`;
@@ -389,7 +389,7 @@ function Bookings() {
                 <span className="text-xs text-gray-500">{slot.rateType}</span>
                 <span className="text-xs text-gray-500">₹{ratesMap[rateKey] || '-'}/hour</span>
                 <span className="text-xs mt-1 px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
-                  {slotVehicleType === 'motorcycle' ? 'Motorcycle' : 
+                  {slotVehicleType === 'bike' ? 'Bike' : 
                    slotVehicleType === 'truck' ? 'Truck' : 'Car'}
                 </span>
               </button>
@@ -423,7 +423,7 @@ function Bookings() {
     setEditingRate(null);
     setNewRate({
       type: '',
-      vehicleType: 'car', // Default to car
+      vehicleType: '', // Default to empty to create a base rate
       hourlyRate: '',
       description: ''
     });
@@ -434,7 +434,7 @@ function Bookings() {
     setEditingRate(null);
     setNewRate({
       type: '',
-      vehicleType: 'car', // Default to car
+      vehicleType: '', // Default to empty to create a base rate
       hourlyRate: '',
       description: ''
     });
@@ -447,7 +447,7 @@ function Bookings() {
       // Include vehicleType in the rate data
       const rateData = {
         ...newRate,
-        vehicleType: newRate.vehicleType
+        vehicleType: newRate.vehicleType || null // Use null for base rates
       };
       
       await parkingRateService.updateParkingRate(editingRate._id, rateData);
@@ -465,7 +465,7 @@ function Bookings() {
     setEditingRate(rate);
     setNewRate({
       type: rate.type,
-      vehicleType: rate.vehicleType || 'car', // Default to car if not specified
+      vehicleType: rate.vehicleType || '', // Default to empty for base rates
       hourlyRate: rate.hourlyRate,
       description: rate.description
     });
@@ -600,9 +600,9 @@ function Bookings() {
                   <li className="mr-2">
                     <button
                       type="button"
-                      onClick={() => setSelectedVehicleType('motorcycle')}
+                      onClick={() => setSelectedVehicleType('bike')}
                       className={`inline-block p-4 rounded-t-lg ${
-                        selectedVehicleType === 'motorcycle'
+                        selectedVehicleType === 'bike'
                           ? 'text-blue-600 border-b-2 border-blue-600 active'
                           : 'hover:text-gray-600 hover:border-gray-300'
                       }`}
@@ -1011,7 +1011,7 @@ function Bookings() {
                     required
                   >
                     <MenuItem value="car">Car</MenuItem>
-                    <MenuItem value="motorcycle">Motorcycle</MenuItem>
+                    <MenuItem value="bike">Bike</MenuItem>
                     <MenuItem value="truck">Truck</MenuItem>
                   </Select>
                 </FormControl>
@@ -1128,14 +1128,14 @@ function Bookings() {
                     </div>
                   </div>
                   
-                  {/* Motorcycle Rates */}
+                  {/* Bike Rates */}
                   <div>
                     <h4 className="text-md font-medium text-gray-800 mb-3 pb-2 border-b border-gray-200">
                       Motorcycle Rates
                     </h4>
                     <div className="space-y-4">
                       {parkingRates
-                        .filter(rate => rate.vehicleType === 'motorcycle')
+                        .filter(rate => rate.vehicleType === 'bike')
                         .map((rate) => (
                           <div
                             key={rate._id}
@@ -1167,7 +1167,7 @@ function Bookings() {
                             </div>
                           </div>
                         ))}
-                      {parkingRates.filter(rate => rate.vehicleType === 'motorcycle').length === 0 && (
+                      {parkingRates.filter(rate => rate.vehicleType === 'bike').length === 0 && (
                         <div className="text-center py-4 text-gray-500">
                           No motorcycle rates found.
                         </div>

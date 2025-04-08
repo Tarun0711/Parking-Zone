@@ -18,7 +18,12 @@ function Admin() {
         blockName: '',
         blockDescription: '',
         floor: '',
-        totalSlots: ''
+        totalSlots: '',
+        vehicleTypes: {
+            car: 0,
+            truck: 0,
+            bike: 0
+        }
     });
     const [selectedMonth, setSelectedMonth] = useState('all');
     const [monthlyRevenue, setMonthlyRevenue] = useState(0);
@@ -182,20 +187,31 @@ function Admin() {
     const handleCreateBlock = async (e) => {
         e.preventDefault();
         try {
-            await axios.post('http://localhost:5000/api/blocks/', blockData, {
+            const response = await axios.post('http://localhost:5000/api/blocks/', blockData, {
                 headers: {
                     Authorization: `Bearer ${token}`
                 }
             });
+            
+            // Show success toast
+            toast.success('Parking block created successfully!');
+            
             setIsModalOpen(false);
             setBlockData({
                 blockName: '',
                 blockDescription: '',
                 floor: '',
-                totalSlots: ''
+                totalSlots: '',
+                vehicleTypes: {
+                    car: 0,
+                    truck: 0,
+                    bike: 0
+                }
             });
         } catch (error) {
             console.error('Error creating parking block:', error);
+            // Show error toast with the error message if available
+            toast.error(error.response?.data?.message || 'Failed to create parking block. Please try again.');
         }
     };
 
@@ -464,6 +480,70 @@ function Admin() {
                                     required
                                 />
                             </div>
+                            <div className='mb-4'>
+                                <label className='block text-gray-700 text-sm font-bold mb-2'>
+                                    Vehicle Types Distribution
+                                </label>
+                                <div className='grid grid-cols-3 gap-2'>
+                                    <div>
+                                        <label className='block text-gray-600 text-xs mb-1'>
+                                            Cars
+                                        </label>
+                                        <input
+                                            type='number'
+                                            min='0'
+                                            value={blockData.vehicleTypes.car}
+                                            onChange={(e) => setBlockData({
+                                                ...blockData, 
+                                                vehicleTypes: {
+                                                    ...blockData.vehicleTypes,
+                                                    car: parseInt(e.target.value) || 0
+                                                }
+                                            })}
+                                            className='w-full px-3 py-2 border rounded-md'
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className='block text-gray-600 text-xs mb-1'>
+                                            Trucks
+                                        </label>
+                                        <input
+                                            type='number'
+                                            min='0'
+                                            value={blockData.vehicleTypes.truck}
+                                            onChange={(e) => setBlockData({
+                                                ...blockData, 
+                                                vehicleTypes: {
+                                                    ...blockData.vehicleTypes,
+                                                    truck: parseInt(e.target.value) || 0
+                                                }
+                                            })}
+                                            className='w-full px-3 py-2 border rounded-md'
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className='block text-gray-600 text-xs mb-1'>
+                                            Bikes
+                                        </label>
+                                        <input
+                                            type='number'
+                                            min='0'
+                                            value={blockData.vehicleTypes.bike}
+                                            onChange={(e) => setBlockData({
+                                                ...blockData, 
+                                                vehicleTypes: {
+                                                    ...blockData.vehicleTypes,
+                                                    bike: parseInt(e.target.value) || 0
+                                                }
+                                            })}
+                                            className='w-full px-3 py-2 border rounded-md'
+                                        />
+                                    </div>
+                                </div>
+                                <div className='mt-2 text-sm text-gray-500'>
+                                    Total: {blockData.vehicleTypes.car + blockData.vehicleTypes.truck + blockData.vehicleTypes.bike} / {blockData.totalSlots || 0}
+                                </div>
+                            </div>
                             <div className='flex justify-end space-x-2'>
                                 <button
                                     type='button'
@@ -651,14 +731,7 @@ function Admin() {
                                         <TableCell>{formatDate(vehicle.createdAt)}</TableCell>
                                         <TableCell>
                                             <div className="flex space-x-2">
-                                                <Button 
-                                                    variant="outlined" 
-                                                    size="small" 
-                                                    color="primary"
-                                                    onClick={() => window.location.href = `/admin/vehicles/${vehicle._id}`}
-                                                >
-                                                    View
-                                                </Button>
+                                                
                                                 
                                                 <Tooltip title={vehicle.isActive ? "Deactivate Vehicle" : "Activate Vehicle"}>
                                                     <IconButton 
