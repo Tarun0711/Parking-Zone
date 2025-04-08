@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { parkingSessionService, parkingRateService } from '../services/api';
 import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
-import { Modal, TextField, Button, Select, MenuItem, FormControl, InputLabel } from '@mui/material';
+import { Modal, TextField, Button, Select, MenuItem, FormControl, InputLabel, Tooltip } from '@mui/material';
 import axios from 'axios';
 import { toast } from 'react-hot-toast';
 import { fetchParkingRates } from '../Store/parkingRatesSlice';
@@ -94,6 +94,7 @@ function Bookings() {
 
   // New state variables for organized slots
   const [organizedSlots, setOrganizedSlots] = useState({});
+  const [selectedVehicleType, setSelectedVehicleType] = useState('car'); // Default to car
   
   // New state variable for QR code error
   const [qrCodeError, setQrCodeError] = useState(false);
@@ -103,6 +104,7 @@ function Bookings() {
   const [editingRate, setEditingRate] = useState(null);
   const [newRate, setNewRate] = useState({
     type: '',
+    vehicleType: 'car', // Default to car
     hourlyRate: '',
     description: ''
   });
@@ -114,10 +116,13 @@ function Bookings() {
 
   // Create a map of rates for easy access
   const ratesMap = React.useMemo(() => {
-    return parkingRates.reduce((acc, rate) => {
-      acc[rate.type] = rate.hourlyRate;
-      return acc;
-    }, {});
+    const map = {};
+    parkingRates.forEach(rate => {
+      // Create a key that includes both type and vehicleType
+      const key = `${rate.type}_${rate.vehicleType || 'car'}`;
+      map[key] = rate.hourlyRate;
+    });
+    return map;
   }, [parkingRates]);
 
   // Add useEffect to fetch bookings on component mount
@@ -146,25 +151,42 @@ function Bookings() {
     fetchVehicles();
   }, [user.id, token]);
 
-  // Helper function to organize slots by block and floor
+  // Helper function to organize slots by block, floor, and vehicle type
   const organizeSlots = (slots) => {
-    const organized = {};
+    const organized = {
+      car: {},
+      motorcycle: {},
+      truck: {}
+    };
+    
     slots.forEach(slot => {
       const blockId = slot.block._id;
       const floor = slot.floor;
       
-      if (!organized[blockId]) {
-        organized[blockId] = {
+      // Determine vehicle type based on slot type
+      // For this implementation, we'll assume:
+      // - 'standard' and 'vip' slots are for cars
+      // - 'electric' slots are for motorcycles
+      // - 'handicapped' slots are for trucks (or you can adjust based on your needs)
+      let vehicleType = 'car';
+      if (slot.type === 'electric') {
+        vehicleType = 'motorcycle';
+      } else if (slot.type === 'handicapped') {
+        vehicleType = 'truck';
+      }
+      
+      if (!organized[vehicleType][blockId]) {
+        organized[vehicleType][blockId] = {
           blockName: slot.block.blockName,
           floors: {}
         };
       }
       
-      if (!organized[blockId].floors[floor]) {
-        organized[blockId].floors[floor] = [];
+      if (!organized[vehicleType][blockId].floors[floor]) {
+        organized[vehicleType][blockId].floors[floor] = [];
       }
       
-      organized[blockId].floors[floor].push(slot);
+      organized[vehicleType][blockId].floors[floor].push(slot);
     });
     return organized;
   };
@@ -202,28 +224,51 @@ function Bookings() {
       return;
     }
 
-    try {
-      // Create booking directly without payment
-      const bookingResponse = await parkingSessionService.createSession({
-        vehicleId: selectedVehicle,
-        parkingSlotId: selectedSlot,
-        amount: 0 // Set amount to 0 since we're not charging
-      });
+    // Check if the selected vehicle type matches the slot type
+    const selectedVehicleObj = vehicles.find(v => v._id === selectedVehicle);
+    const selectedSlotObj = availableSlots.find(s => s._id === selectedSlot);
+    
+    // Determine if the slot is for motorcycles, trucks, or cars
+    let slotVehicleType = 'car';
+    if (selectedSlotObj.type === 'electric') {
+      slotVehicleType = 'motorcycle';
+    } else if (selectedSlotObj.type === 'handicapped') {
+      slotVehicleType = 'truck';
+    }
+    
+    if (selectedVehicleObj.vehicleType !== slotVehicleType) {
+      setBookingError(`This slot is for ${slotVehicleType}s, but you selected a ${selectedVehicleObj.vehicleType}`);
+      setBookingLoading(false);
+      return;
+    }
 
-      if (!bookingResponse || !bookingResponse.data) {
+    try {
+      // Send parking request instead of creating session directly
+      const response = await axios.post(
+        `${BASE_URL}/api/parking-requests`,
+        {
+          vehicleId: selectedVehicle,
+          parkingSlotId: selectedSlot
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+
+      if (!response.data || !response.data.success) {
         throw new Error('Invalid response from server');
       }
 
-      // Refresh bookings list
-      await fetchBookings();
+      // Refresh requests list
+      await fetchParkingRequests();
       
       // Reset selection
       setSelectedVehicle('');
       setSelectedSlot('');
       
-     
-      
-     toast.success('Booking successful!');
+      toast.success('Parking request sent successfully! Waiting for admin approval.');
       
       const slotsResponse = await axios.get(`${BASE_URL}/api/parking-slots`, {
         headers: {
@@ -234,11 +279,11 @@ function Bookings() {
       setAvailableSlots(slots);
       setOrganizedSlots(organizeSlots(slots));
     } catch (error) {
-      console.error('Error creating booking:', error);
+      console.error('Error sending parking request:', error);
       setBookingError(
         error.response?.data?.message || 
         error.message || 
-        'Failed to create booking. Please try again.'
+        'Failed to send parking request. Please try again.'
       );
     } finally {
       setBookingLoading(false);
@@ -314,20 +359,43 @@ function Bookings() {
   const renderSlotsGrid = (slots) => {
     return (
       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4">
-        {slots.map((slot) => (
-          <button
-            key={slot._id}
-            onClick={() => slot.status === 'available' ? setSelectedSlot(slot._id) : null}
-            disabled={slot.status !== 'available'}
-            className={`relative p-4 border-2 rounded-lg ${getSlotStatusColor(slot)} 
-              ${selectedSlot === slot._id ? 'ring-2 ring-emerald-500 bg-emerald-200' : ''}
-              transition-all duration-200 flex flex-col items-center justify-center`}
-          >
-            <span className="text-sm font-semibold">{slot.slotNumber}</span>
-            <span className="text-xs text-gray-500">{slot.rateType}</span>
-            <span className="text-xs text-gray-500">₹{ratesMap[slot.rateType] || '-'}/hour</span>
-          </button>
-        ))}
+        {slots.map((slot) => {
+          // Determine the vehicle type for this slot
+          let slotVehicleType = 'car';
+          if (slot.type === 'electric') {
+            slotVehicleType = 'motorcycle';
+          } else if (slot.type === 'handicapped') {
+            slotVehicleType = 'truck';
+          }
+          
+          // Create the rate key
+          const rateKey = `${slot.rateType}_${slotVehicleType}`;
+          
+          return (
+            <Tooltip
+              key={slot._id}
+              title={slot.status === 'available' ? 'Available' : 'This slot is already booked'}
+              placement="top"
+              arrow
+            >
+              <button
+                onClick={() => slot.status === 'available' ? setSelectedSlot(slot._id) : null}
+                disabled={slot.status !== 'available'}
+                className={`relative p-4 border-2 rounded-lg ${getSlotStatusColor(slot)} 
+                  ${selectedSlot === slot._id ? 'ring-2 ring-emerald-500 bg-emerald-200' : ''}
+                  transition-all duration-200 flex flex-col items-center justify-center`}
+              >
+                <span className="text-sm font-semibold">{slot.slotNumber}</span>
+                <span className="text-xs text-gray-500">{slot.rateType}</span>
+                <span className="text-xs text-gray-500">₹{ratesMap[rateKey] || '-'}/hour</span>
+                <span className="text-xs mt-1 px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
+                  {slotVehicleType === 'motorcycle' ? 'Motorcycle' : 
+                   slotVehicleType === 'truck' ? 'Truck' : 'Car'}
+                </span>
+              </button>
+            </Tooltip>
+          );
+        })}
       </div>
     );
   };
@@ -339,12 +407,23 @@ function Bookings() {
     }
   }, [dispatch, isAdmin]);
 
+  // Update vehicle type when a vehicle is selected
+  useEffect(() => {
+    if (selectedVehicle) {
+      const vehicle = vehicles.find(v => v._id === selectedVehicle);
+      if (vehicle) {
+        setSelectedVehicleType(vehicle.vehicleType);
+      }
+    }
+  }, [selectedVehicle, vehicles]);
+
   // Add handler for pricing modal
   const handlePricingModalOpen = () => {
     setIsPricingModalOpen(true);
     setEditingRate(null);
     setNewRate({
       type: '',
+      vehicleType: 'car', // Default to car
       hourlyRate: '',
       description: ''
     });
@@ -355,6 +434,7 @@ function Bookings() {
     setEditingRate(null);
     setNewRate({
       type: '',
+      vehicleType: 'car', // Default to car
       hourlyRate: '',
       description: ''
     });
@@ -364,7 +444,13 @@ function Bookings() {
   const handleSaveParkingRate = async (e) => {
     e.preventDefault();
     try {
-      await parkingRateService.updateParkingRate(editingRate._id, newRate);
+      // Include vehicleType in the rate data
+      const rateData = {
+        ...newRate,
+        vehicleType: newRate.vehicleType
+      };
+      
+      await parkingRateService.updateParkingRate(editingRate._id, rateData);
       toast.success('Parking rate updated successfully');
       dispatch(fetchParkingRates());
       handlePricingModalClose();
@@ -379,6 +465,7 @@ function Bookings() {
     setEditingRate(rate);
     setNewRate({
       type: rate.type,
+      vehicleType: rate.vehicleType || 'car', // Default to car if not specified
       hourlyRate: rate.hourlyRate,
       description: rate.description
     });
@@ -397,6 +484,35 @@ function Bookings() {
       }
     }
   };
+
+  // Add state for parking requests
+  const [parkingRequests, setParkingRequests] = useState([]);
+  const [requestsLoading, setRequestsLoading] = useState(true);
+  const [requestsError, setRequestsError] = useState(null);
+
+  // Fetch parking requests
+  const fetchParkingRequests = async () => {
+    try {
+      setRequestsError(null);
+      setRequestsLoading(true);
+      const response = await axios.get(`${BASE_URL}/api/parking-requests/user/${user.id}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      setParkingRequests(response.data.data || []);
+    } catch (error) {
+      console.error('Error fetching parking requests:', error);
+      setRequestsError('Failed to load parking requests. Please try again later.');
+    } finally {
+      setRequestsLoading(false);
+    }
+  };
+
+  // Add useEffect to fetch parking requests
+  useEffect(() => {
+    fetchParkingRequests();
+  }, [user.id, token]);
 
   if (loading) {
     return (
@@ -465,9 +581,54 @@ function Bookings() {
             <div>
               <h3 className="text-lg font-medium text-gray-700 mb-4">Select Parking Slot</h3>
               
+              {/* Vehicle Type Tabs */}
+              <div className="mb-6 border-b border-gray-200">
+                <ul className="flex flex-wrap -mb-px text-sm font-medium text-center">
+                  <li className="mr-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedVehicleType('car')}
+                      className={`inline-block p-4 rounded-t-lg ${
+                        selectedVehicleType === 'car'
+                          ? 'text-blue-600 border-b-2 border-blue-600 active'
+                          : 'hover:text-gray-600 hover:border-gray-300'
+                      }`}
+                    >
+                      Car Slots
+                    </button>
+                  </li>
+                  <li className="mr-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedVehicleType('motorcycle')}
+                      className={`inline-block p-4 rounded-t-lg ${
+                        selectedVehicleType === 'motorcycle'
+                          ? 'text-blue-600 border-b-2 border-blue-600 active'
+                          : 'hover:text-gray-600 hover:border-gray-300'
+                      }`}
+                    >
+                      Motorcycle Slots
+                    </button>
+                  </li>
+                  <li className="mr-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedVehicleType('truck')}
+                      className={`inline-block p-4 rounded-t-lg ${
+                        selectedVehicleType === 'truck'
+                          ? 'text-blue-600 border-b-2 border-blue-600 active'
+                          : 'hover:text-gray-600 hover:border-gray-300'
+                      }`}
+                    >
+                      Truck Slots
+                    </button>
+                  </li>
+                </ul>
+              </div>
+              
               {/* Building Blocks */}
               <div className="space-y-8">
-                {Object.entries(organizedSlots).map(([blockId, block]) => (
+                {Object.entries(organizedSlots[selectedVehicleType] || {}).map(([blockId, block]) => (
                   <div key={blockId} className="border border-blue-100 rounded-lg p-4 bg-white/50 backdrop-blur-sm">
                     <h4 className="text-lg font-semibold text-gray-800 mb-4">
                       Block {block.blockName}
@@ -488,10 +649,16 @@ function Bookings() {
                     </div>
                   </div>
                 ))}
+                
+                {Object.keys(organizedSlots[selectedVehicleType] || {}).length === 0 && (
+                  <div className="text-center py-8 text-gray-500">
+                    No {selectedVehicleType} parking slots available.
+                  </div>
+                )}
               </div>
 
               {/* Legend */}
-              <div className="mt-6 flex items-center space-x-6">
+              <div className="mt-6 flex flex-wrap items-center gap-4">
                 <div className="flex items-center">
                   <div className="w-4 h-4 border-2 border-emerald-400 rounded mr-2"></div>
                   <span className="text-sm text-gray-600">Available</span>
@@ -503,6 +670,24 @@ function Bookings() {
                 <div className="flex items-center">
                   <div className="w-4 h-4 border-2 border-amber-400 rounded mr-2"></div>
                   <span className="text-sm text-gray-600">Reserved</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-4 h-4 bg-blue-100 rounded mr-2 flex items-center justify-center">
+                    <span className="text-xs font-bold text-blue-800">C</span>
+                  </div>
+                  <span className="text-sm text-gray-600">Car Slot</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-4 h-4 bg-blue-100 rounded mr-2 flex items-center justify-center">
+                    <span className="text-xs font-bold text-blue-800">M</span>
+                  </div>
+                  <span className="text-sm text-gray-600">Motorcycle Slot</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-4 h-4 bg-blue-100 rounded mr-2 flex items-center justify-center">
+                    <span className="text-xs font-bold text-blue-800">T</span>
+                  </div>
+                  <span className="text-sm text-gray-600">Truck Slot</span>
                 </div>
               </div>
             </div>
@@ -533,6 +718,83 @@ function Bookings() {
             {error}
           </div>
         )}
+        
+        {/* Parking Requests Section */}
+        <div className="mt-12 bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm p-6 border border-blue-100">
+          <h2 className="text-2xl font-semibold text-gray-900 mb-6">My Parking Requests</h2>
+          
+          {requestsError && (
+            <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-400 text-red-700 rounded-lg">
+              {requestsError}
+            </div>
+          )}
+
+          {requestsLoading ? (
+            <div className="flex justify-center items-center py-8">
+              <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+            </div>
+          ) : parkingRequests.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              You haven't sent any parking requests yet.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {parkingRequests.map((request) => (
+                <div 
+                  key={request._id}
+                  className="booking-card bg-white/80 backdrop-blur-sm rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 overflow-hidden border border-blue-100"
+                >
+                  <div className="p-6">
+                    <div className="flex justify-between items-start mb-4">
+                      <h3 className="text-xl font-bold text-gray-900">
+                        Slot {request.parkingSlot?.slotNumber}
+                      </h3>
+                      <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                        request.status === 'pending' ? 'bg-amber-100 text-amber-700' :
+                        request.status === 'approved' ? 'bg-emerald-100 text-emerald-700' :
+                        request.status === 'rejected' ? 'bg-rose-100 text-rose-700' :
+                        'bg-gray-100 text-gray-700'
+                      }`}>
+                        {request.status}
+                      </span>
+                    </div>
+
+                    <div className="space-y-3 mb-6">
+                      <div className="flex items-center text-gray-600">
+                        <span className="font-medium mr-2">Vehicle:</span>
+                        {request.vehicle?.licensePlate}
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        Requested: {formatDate(request.requestTime)}
+                      </div>
+                      {request.responseTime && (
+                        <div className="text-sm text-gray-500">
+                          Responded: {formatDate(request.responseTime)}
+                        </div>
+                      )}
+                      {request.reason && (
+                        <div className="text-sm text-gray-500">
+                          Reason: {request.reason}
+                        </div>
+                      )}
+                    </div>
+
+                    {request.status === 'approved' && request.parkingSession && (
+                      <div className="mt-4 pt-4 border-t border-gray-100">
+                        <div className="text-sm font-medium text-emerald-600 mb-2">
+                          Parking Session Created
+                        </div>
+                        <div className="text-sm text-gray-500">
+                          Session ID: {request.parkingSession._id}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
         
         {bookings.length === 0 ? (
           <div className="text-center py-16 bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm border border-blue-100">
@@ -741,13 +1003,26 @@ function Bookings() {
             {editingRate ? (
               <form onSubmit={handleSaveParkingRate} className="space-y-6">
                 <FormControl fullWidth>
+                  <InputLabel>Vehicle Type</InputLabel>
+                  <Select
+                    value={newRate.vehicleType}
+                    onChange={(e) => setNewRate({ ...newRate, vehicleType: e.target.value })}
+                    label="Vehicle Type"
+                    required
+                  >
+                    <MenuItem value="car">Car</MenuItem>
+                    <MenuItem value="motorcycle">Motorcycle</MenuItem>
+                    <MenuItem value="truck">Truck</MenuItem>
+                  </Select>
+                </FormControl>
+
+                <FormControl fullWidth>
                   <InputLabel>Rate Type</InputLabel>
                   <Select
                     value={newRate.type}
                     onChange={(e) => setNewRate({ ...newRate, type: e.target.value })}
                     label="Rate Type"
                     required
-                    disabled
                   >
                     <MenuItem value="NORMAL">Normal</MenuItem>
                     <MenuItem value="VIP">VIP</MenuItem>
@@ -805,38 +1080,147 @@ function Bookings() {
                   <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                 </div>
               ) : parkingRates && parkingRates.length > 0 ? (
-                <div className="space-y-4">
-                  {parkingRates.map((rate) => (
-                    <div
-                      key={rate._id}
-                      className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
-                    >
-                      <div>
-                        <h4 className="font-medium text-gray-900">{rate.type}</h4>
-                        <p className="text-sm text-gray-500">₹{rate.hourlyRate}/hour</p>
-                        {rate.description && (
-                          <p className="text-sm text-gray-600 mt-1">{rate.description}</p>
-                        )}
-                      </div>
-                      <div className="flex space-x-2">
-                        <Button
-                          variant="outlined"
-                          size="small"
-                          onClick={() => handleEditRate(rate)}
-                        >
-                          Edit
-                        </Button>
-                        <Button
-                          variant="outlined"
-                          color="error"
-                          size="small"
-                          onClick={() => handleDeleteRate(rate._id)}
-                        >
-                          Delete
-                        </Button>
-                      </div>
+                <div className="space-y-6">
+                  {/* Car Rates */}
+                  <div>
+                    <h4 className="text-md font-medium text-gray-800 mb-3 pb-2 border-b border-gray-200">
+                      Car Rates
+                    </h4>
+                    <div className="space-y-4">
+                      {parkingRates
+                        .filter(rate => rate.vehicleType === 'car' || !rate.vehicleType)
+                        .map((rate) => (
+                          <div
+                            key={rate._id}
+                            className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
+                          >
+                            <div>
+                              <h4 className="font-medium text-gray-900">{rate.type}</h4>
+                              <p className="text-sm text-gray-500">₹{rate.hourlyRate}/hour</p>
+                              {rate.description && (
+                                <p className="text-sm text-gray-600 mt-1">{rate.description}</p>
+                              )}
+                            </div>
+                            <div className="flex space-x-2">
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                onClick={() => handleEditRate(rate)}
+                              >
+                                Edit
+                              </Button>
+                              <Button
+                                variant="outlined"
+                                color="error"
+                                size="small"
+                                onClick={() => handleDeleteRate(rate._id)}
+                              >
+                                Delete
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      {parkingRates.filter(rate => rate.vehicleType === 'car' || !rate.vehicleType).length === 0 && (
+                        <div className="text-center py-4 text-gray-500">
+                          No car rates found.
+                        </div>
+                      )}
                     </div>
-                  ))}
+                  </div>
+                  
+                  {/* Motorcycle Rates */}
+                  <div>
+                    <h4 className="text-md font-medium text-gray-800 mb-3 pb-2 border-b border-gray-200">
+                      Motorcycle Rates
+                    </h4>
+                    <div className="space-y-4">
+                      {parkingRates
+                        .filter(rate => rate.vehicleType === 'motorcycle')
+                        .map((rate) => (
+                          <div
+                            key={rate._id}
+                            className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
+                          >
+                            <div>
+                              <h4 className="font-medium text-gray-900">{rate.type}</h4>
+                              <p className="text-sm text-gray-500">₹{rate.hourlyRate}/hour</p>
+                              {rate.description && (
+                                <p className="text-sm text-gray-600 mt-1">{rate.description}</p>
+                              )}
+                            </div>
+                            <div className="flex space-x-2">
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                onClick={() => handleEditRate(rate)}
+                              >
+                                Edit
+                              </Button>
+                              <Button
+                                variant="outlined"
+                                color="error"
+                                size="small"
+                                onClick={() => handleDeleteRate(rate._id)}
+                              >
+                                Delete
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      {parkingRates.filter(rate => rate.vehicleType === 'motorcycle').length === 0 && (
+                        <div className="text-center py-4 text-gray-500">
+                          No motorcycle rates found.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Truck Rates */}
+                  <div>
+                    <h4 className="text-md font-medium text-gray-800 mb-3 pb-2 border-b border-gray-200">
+                      Truck Rates
+                    </h4>
+                    <div className="space-y-4">
+                      {parkingRates
+                        .filter(rate => rate.vehicleType === 'truck')
+                        .map((rate) => (
+                          <div
+                            key={rate._id}
+                            className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
+                          >
+                            <div>
+                              <h4 className="font-medium text-gray-900">{rate.type}</h4>
+                              <p className="text-sm text-gray-500">₹{rate.hourlyRate}/hour</p>
+                              {rate.description && (
+                                <p className="text-sm text-gray-600 mt-1">{rate.description}</p>
+                              )}
+                            </div>
+                            <div className="flex space-x-2">
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                onClick={() => handleEditRate(rate)}
+                              >
+                                Edit
+                              </Button>
+                              <Button
+                                variant="outlined"
+                                color="error"
+                                size="small"
+                                onClick={() => handleDeleteRate(rate._id)}
+                              >
+                                Delete
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      {parkingRates.filter(rate => rate.vehicleType === 'truck').length === 0 && (
+                        <div className="text-center py-4 text-gray-500">
+                          No truck rates found.
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <div className="text-center py-4 text-gray-500">

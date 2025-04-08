@@ -8,28 +8,32 @@ import Login from "./Login";
 
 function Home() {
   const { isAuthenticated } = useSelector((state) => state.auth);
+  const { user } = useSelector((state) => state.auth);
   const navigate = useNavigate();
   const [showLogin, setShowLogin] = React.useState(false);
   const [heroRef, heroInView] = useInView({
     triggerOnce: true,
-    threshold: 0.2
+    threshold: 0.2,
   });
 
   const [formRef, formInView] = useInView({
     triggerOnce: true,
-    threshold: 0.2
+    threshold: 0.2,
   });
 
   const handleGetStarted = () => {
     if (isAuthenticated) {
-      navigate('/bookings');
+      navigate("/bookings");
     } else {
       setShowLogin(true);
     }
   };
 
   return (
-    <div id="home" className="relative min-h-screen bg-gradient-to-br overflow-hidden from-gray-50 to-gray-100">
+    <div
+      id="home"
+      className="relative min-h-screen bg-gradient-to-br overflow-hidden from-gray-50 to-gray-100"
+    >
       {/* Background elements */}
       <div className="absolute top-[-10%] left-[-10%] w-[600px] h-[600px] rounded-full bg-blue-400/20 blur-3xl animate-pulse"></div>
       <div className="absolute bottom-[-15%] right-[-15%] w-[600px] h-[600px] rounded-full bg-pink-400/20 blur-3xl animate-pulse"></div>
@@ -67,22 +71,23 @@ function Home() {
                 >
                   Get Started
                 </motion.button>
-                
               </div>
             </motion.div>
-
-            {/* Form Section */}
-            <motion.div
-              ref={formRef}
-              initial={{ opacity: 0, x: 50 }}
-              animate={{ opacity: formInView ? 1 : 0, x: formInView ? 0 : 50 }}
-              transition={{ duration: 0.8, ease: "easeOut" }}
-              className="w-full md:w-1/2 max-w-xl"
-            >
-              <div className="navbar mx-auto backdrop-blur-md bg-white/70 rounded-2xl shadow-xl p-4 hover:shadow-2xl transition-all duration-200 transform">
-                <AddVehival />
-              </div>
-            </motion.div>
+            
+            {user && user.role !== "admin" && (
+              /* Form Section */
+              <motion.div
+                ref={formRef}
+                initial={{ opacity: 0, x: 50 }}
+                animate={{ opacity: formInView ? 1 : 0, x: formInView ? 0 : 50 }}
+                transition={{ duration: 0.8, ease: "easeOut" }}
+                className="w-full md:w-1/2 max-w-xl"
+              >
+                <div className="navbar mx-auto backdrop-blur-md bg-white/70 rounded-2xl shadow-xl p-4 hover:shadow-2xl transition-all duration-200 transform">
+                  <AddVehival />
+                </div>
+              </motion.div>
+            )}
           </div>
         </main>
       </div>

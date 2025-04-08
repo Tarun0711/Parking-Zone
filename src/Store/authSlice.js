@@ -1,7 +1,7 @@
 import { createSlice } from '@reduxjs/toolkit';
 import Cookies from 'js-cookie';
 
-const COOKIE_EXPIRY = 5; // 5 days
+const COOKIE_EXPIRY = 5;
 
 const getUserFromCookie = () => {
     const userStr = Cookies.get('user');

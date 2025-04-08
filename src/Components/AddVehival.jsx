@@ -35,6 +35,12 @@ function AddVehival() {
   const { isAuthenticated, user, token } = useSelector((state) => state.auth);
   const dispatch = useDispatch();
 
+  const validateLicensePlate = (plate) => {
+    // Format: XX 12 X 1234
+    const plateRegex = /^[A-Z]{2}\s\d{2}\s[A-Z]\s\d{4}$/;
+    return plateRegex.test(plate);
+  };
+
   const handleVehicleTypeSelect = (type) => {
     setFormData((prev) => ({
       ...prev,
@@ -44,10 +50,76 @@ function AddVehival() {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    
+    if (name === "licensePlate") {
+      // Remove all spaces and convert to uppercase
+      let formattedValue = value.replace(/\s/g, '').toUpperCase();
+      
+      // Validate and format each character based on position
+      let result = '';
+      for (let i = 0; i < formattedValue.length; i++) {
+        const char = formattedValue[i];
+        
+        // First two positions (0,1) - only letters
+        if (i < 2) {
+          if (/[A-Z]/.test(char)) {
+            result += char;
+          }
+        }
+        // Next two positions (2,3) - only numbers
+        else if (i < 4) {
+          if (/[0-9]/.test(char)) {
+            result += char;
+          }
+        }
+        // Next position (4) - only letter
+        else if (i < 5) {
+          if (/[A-Z]/.test(char)) {
+            result += char;
+          }
+        }
+        // Last four positions (5,6,7,8) - only numbers
+        else if (i < 9) {
+          if (/[0-9]/.test(char)) {
+            result += char;
+          }
+        }
+      }
+      
+      // Add spaces in the correct positions
+      if (result.length > 0) {
+        let formattedResult = '';
+        // First two letters
+        formattedResult += result.slice(0, 2);
+        if (result.length > 2) {
+          formattedResult += ' ' + result.slice(2, 4); // Two digits
+          if (result.length > 4) {
+            formattedResult += ' ' + result.slice(4, 5); // One letter
+            if (result.length > 5) {
+              formattedResult += ' ' + result.slice(5, 9); // Four digits
+            }
+          }
+        }
+        result = formattedResult;
+      }
+
+      setFormData((prev) => ({
+        ...prev,
+        [name]: result,
+      }));
+    } else if (name === "make") {
+      // Only allow letters and spaces for company name
+      const formattedValue = value.replace(/[^A-Za-z\s]/g, '');
+      setFormData((prev) => ({
+        ...prev,
+        [name]: formattedValue,
+      }));
+    } else {
+      setFormData((prev) => ({
+        ...prev,
+        [name]: value,
+      }));
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -61,6 +133,11 @@ function AddVehival() {
 
     if (!formData.vehicleType || !formData.licensePlate || !formData.make) {
       setError("Please fill in all required fields");
+      return;
+    }
+
+    if (!validateLicensePlate(formData.licensePlate)) {
+      setError("Invalid license plate format. Please use format: XX 12 X 1234");
       return;
     }
 

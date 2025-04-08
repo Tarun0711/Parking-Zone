@@ -1,6 +1,11 @@
 import React, { useEffect, useState } from 'react'
 import axios from 'axios'; // Make sure to import axios
 import { useSelector } from 'react-redux';
+import { Select, MenuItem, FormControl, InputLabel, TextField, Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Pagination, Box, Typography, Chip, IconButton, Tooltip, Modal } from '@mui/material';
+import { toast } from 'react-hot-toast';
+import DeleteIcon from '@mui/icons-material/Delete';
+import BlockIcon from '@mui/icons-material/Block';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 
 function Admin() {
     const [totalSessions, setTotalSessions] = useState(0);
@@ -15,7 +20,48 @@ function Admin() {
         floor: '',
         totalSlots: ''
     });
+    const [selectedMonth, setSelectedMonth] = useState('all');
+    const [monthlyRevenue, setMonthlyRevenue] = useState(0);
+    
+    // Vehicle management states
+    const [vehicles, setVehicles] = useState([]);
+    const [vehicleLoading, setVehicleLoading] = useState(false);
+    const [vehiclePage, setVehiclePage] = useState(1);
+    const [vehicleLimit, setVehicleLimit] = useState(10);
+    const [vehicleTotal, setVehicleTotal] = useState(0);
+    const [vehicleFilter, setVehicleFilter] = useState({
+        vehicleType: '',
+        isRegular: '',
+        sort: '-createdAt'
+    });
+    const [actionLoading, setActionLoading] = useState({});
+    
+    // Add state for parking requests
+    const [parkingRequests, setParkingRequests] = useState([]);
+    const [requestsLoading, setRequestsLoading] = useState(false);
+    const [requestActionLoading, setRequestActionLoading] = useState({});
+    const [rejectReason, setRejectReason] = useState('');
+    const [selectedRequest, setSelectedRequest] = useState(null);
+    const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
+    
     const { token } = useSelector((state) => state.auth);
+
+    // Generate months for the filter
+    const months = [
+        { value: 'all', label: 'All Time' },
+        { value: '1', label: 'January' },
+        { value: '2', label: 'February' },
+        { value: '3', label: 'March' },
+        { value: '4', label: 'April' },
+        { value: '5', label: 'May' },
+        { value: '6', label: 'June' },
+        { value: '7', label: 'July' },
+        { value: '8', label: 'August' },
+        { value: '9', label: 'September' },
+        { value: '10', label: 'October' },
+        { value: '11', label: 'November' },
+        { value: '12', label: 'December' }
+    ];
 
     // Fetch parking sessions
     const fetchParkingSessions = async () => {
@@ -28,11 +74,82 @@ function Admin() {
             });
             setParkingSessions(response.data.data);
             setTotalSessions(response.data.count);
+            
+            // Calculate total revenue
+            const total = response.data.data.reduce((sum, session) => sum + (session.amount || 0), 0);
+            setTotalRevenue(total);
+            
+            // Calculate monthly revenue if a month is selected
+            if (selectedMonth !== 'all') {
+                const currentYear = new Date().getFullYear();
+                const monthlyTotal = response.data.data
+                    .filter(session => {
+                        const sessionDate = new Date(session.exitTime || session.entryTime);
+                        return sessionDate.getMonth() + 1 === parseInt(selectedMonth) && 
+                               sessionDate.getFullYear() === currentYear;
+                    })
+                    .reduce((sum, session) => sum + (session.amount || 0), 0);
+                setMonthlyRevenue(monthlyTotal);
+            } else {
+                setMonthlyRevenue(total);
+            }
         } catch (error) {
             console.error('Error fetching parking sessions:', error);
         } finally {
             setLoading(false);
         }
+    };
+
+    // Fetch vehicles with pagination and filtering
+    const fetchVehicles = async () => {
+        try {
+            setVehicleLoading(true);
+            
+            // Build query string
+            let queryString = `page=${vehiclePage}&limit=${vehicleLimit}&sort=${vehicleFilter.sort}`;
+            
+            if (vehicleFilter.vehicleType) {
+                queryString += `&vehicleType=${vehicleFilter.vehicleType}`;
+            }
+            
+            if (vehicleFilter.isRegular !== '') {
+                queryString += `&isRegular=${vehicleFilter.isRegular}`;
+            }
+            
+            const response = await axios.get(`http://localhost:5000/api/vehicles/admin/all?${queryString}`, {
+                headers: {
+                    Authorization: `Bearer ${token}`
+                }
+            });
+            
+            setVehicles(response.data.data.vehicles);
+            setVehicleTotal(response.data.total);
+            setTotalVehicles(response.data.total);
+        } catch (error) {
+            console.error('Error fetching vehicles:', error);
+            toast.error('Failed to fetch vehicles');
+        } finally {
+            setVehicleLoading(false);
+        }
+    };
+
+    // Handle month filter change
+    const handleMonthChange = (event) => {
+        setSelectedMonth(event.target.value);
+    };
+
+    // Handle vehicle filter change
+    const handleVehicleFilterChange = (field, value) => {
+        setVehicleFilter(prev => ({
+            ...prev,
+            [field]: value
+        }));
+        setVehiclePage(1); // Reset to first page when filter changes
+    };
+
+    // Handle vehicle page change
+    const handleVehiclePageChange = (event, value) => {
+        setVehiclePage(value);
     };
 
     // Handle status change
@@ -82,9 +199,200 @@ function Admin() {
         }
     };
 
+    // Format date for display
+    const formatDate = (dateString) => {
+        if (!dateString) return 'N/A';
+        return new Date(dateString).toLocaleString();
+    };
+
+    // Toggle vehicle active status
+    const handleToggleActiveStatus = async (vehicleId, currentStatus) => {
+        try {
+            setActionLoading(prev => ({ ...prev, [vehicleId]: true }));
+            
+            const response = await axios.patch(
+                `http://localhost:5000/api/vehicles/${vehicleId}`,
+                { isActive: !currentStatus },
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`
+                    }
+                }
+            );
+            
+            // Update the vehicle in the local state
+            setVehicles(prevVehicles => 
+                prevVehicles.map(vehicle => 
+                    vehicle._id === vehicleId 
+                        ? { ...vehicle, isActive: !currentStatus } 
+                        : vehicle
+                )
+            );
+            
+            toast.success(`Vehicle ${!currentStatus ? 'activated' : 'deactivated'} successfully`);
+        } catch (error) {
+            console.error('Error toggling vehicle status:', error);
+            toast.error('Failed to update vehicle status');
+        } finally {
+            setActionLoading(prev => ({ ...prev, [vehicleId]: false }));
+        }
+    };
+
+    // Delete vehicle
+    const handleDeleteVehicle = async (vehicleId) => {
+        if (!window.confirm('Are you sure you want to delete this vehicle? This action cannot be undone.')) {
+            return;
+        }
+        
+        try {
+            setActionLoading(prev => ({ ...prev, [vehicleId]: true }));
+            
+            await axios.delete(
+                `http://localhost:5000/api/vehicles/${vehicleId}`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`
+                    }
+                }
+            );
+            
+            // Remove the vehicle from the local state
+            setVehicles(prevVehicles => 
+                prevVehicles.filter(vehicle => vehicle._id !== vehicleId)
+            );
+            
+            // Update total count
+            setVehicleTotal(prev => prev - 1);
+            setTotalVehicles(prev => prev - 1);
+            
+            toast.success('Vehicle deleted successfully');
+        } catch (error) {
+            console.error('Error deleting vehicle:', error);
+            toast.error('Failed to delete vehicle');
+        } finally {
+            setActionLoading(prev => ({ ...prev, [vehicleId]: false }));
+        }
+    };
+
+    // Fetch parking requests
+    const fetchParkingRequests = async () => {
+        try {
+            setRequestsLoading(true);
+            const response = await axios.get('http://localhost:5000/api/parking-requests', {
+                headers: {
+                    Authorization: `Bearer ${token}`
+                }
+            });
+            setParkingRequests(response.data.data);
+        } catch (error) {
+            console.error('Error fetching parking requests:', error);
+            toast.error('Failed to fetch parking requests');
+        } finally {
+            setRequestsLoading(false);
+        }
+    };
+    
+    // Handle approve request
+    const handleApproveRequest = async (requestId) => {
+        try {
+            setRequestActionLoading(prev => ({ ...prev, [requestId]: true }));
+            
+            const response = await axios.post(
+                `http://localhost:5000/api/parking-requests/${requestId}/approve`,
+                {},
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`
+                    }
+                }
+            );
+            
+            // Update the request in the local state
+            setParkingRequests(prevRequests => 
+                prevRequests.map(request => 
+                    request._id === requestId 
+                        ? { ...request, status: 'approved', parkingSession: response.data.data.parkingSession } 
+                        : request
+                )
+            );
+            
+            toast.success('Parking request approved successfully');
+            
+            // Refresh parking sessions
+            fetchParkingSessions();
+        } catch (error) {
+            console.error('Error approving parking request:', error);
+            toast.error(error.response?.data?.message || 'Failed to approve request');
+        } finally {
+            setRequestActionLoading(prev => ({ ...prev, [requestId]: false }));
+        }
+    };
+    
+    // Handle reject request
+    const handleRejectRequest = async (requestId) => {
+        if (!rejectReason.trim()) {
+            toast.error('Please provide a reason for rejection');
+            return;
+        }
+        
+        try {
+            setRequestActionLoading(prev => ({ ...prev, [requestId]: true }));
+            
+            const response = await axios.post(
+                `http://localhost:5000/api/parking-requests/${requestId}/reject`,
+                { reason: rejectReason },
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`
+                    }
+                }
+            );
+            
+            // Update the request in the local state
+            setParkingRequests(prevRequests => 
+                prevRequests.map(request => 
+                    request._id === requestId 
+                        ? { ...request, status: 'rejected', reason: rejectReason } 
+                        : request
+                )
+            );
+            
+            toast.success('Parking request rejected successfully');
+            setIsRejectModalOpen(false);
+            setRejectReason('');
+            setSelectedRequest(null);
+        } catch (error) {
+            console.error('Error rejecting parking request:', error);
+            toast.error(error.response?.data?.message || 'Failed to reject request');
+        } finally {
+            setRequestActionLoading(prev => ({ ...prev, [requestId]: false }));
+        }
+    };
+    
+    // Open reject modal
+    const openRejectModal = (request) => {
+        setSelectedRequest(request);
+        setIsRejectModalOpen(true);
+    };
+    
+    // Close reject modal
+    const closeRejectModal = () => {
+        setIsRejectModalOpen(false);
+        setRejectReason('');
+        setSelectedRequest(null);
+    };
+
     useEffect(() => {
         fetchParkingSessions();
-    }, []);
+    }, [selectedMonth]);
+
+    useEffect(() => {
+        fetchVehicles();
+    }, [vehiclePage, vehicleFilter]);
+
+    useEffect(() => {
+        fetchParkingRequests();
+    }, [token]);
 
     return (
         <div
@@ -197,13 +505,346 @@ function Admin() {
                     </div>
                     <div className='bg-white p-6 rounded-lg shadow-md'>
                         <h2 className='text-xl font-bold text-gray-800 mb-4'>
-                            Total Revenue
-                            
+                            Revenue
+                            <div className='mt-2'>
+                                <FormControl fullWidth size="small">
+                                    <InputLabel id="month-filter-label">Filter by Month</InputLabel>
+                                    <Select
+                                        labelId="month-filter-label"
+                                        value={selectedMonth}
+                                        onChange={handleMonthChange}
+                                        label="Filter by Month"
+                                    >
+                                        {months.map((month) => (
+                                            <MenuItem key={month.value} value={month.value}>
+                                                {month.label}
+                                            </MenuItem>
+                                        ))}
+                                    </Select>
+                                </FormControl>
+                            </div>
+                            <div className='mt-4'>
+                                <span className='text-blue-500 text-2xl'>
+                                    ₹{selectedMonth === 'all' ? totalRevenue : monthlyRevenue}
+                                </span>
+                                <span className='text-sm text-gray-500 ml-2'>
+                                    {selectedMonth !== 'all' ? `(${months.find(m => m.value === selectedMonth)?.label})` : '(All Time)'}
+                                </span>
+                            </div>
                         </h2>
                     </div>
                     
                 </div>
             </div>
+            
+            {/* Vehicles Management Section */}
+            <div className='mt-12 bg-white rounded-lg shadow-md p-6'>
+                <div className='flex justify-between items-center mb-6'>
+                    <h2 className='text-2xl font-bold text-gray-800'>Vehicle Management</h2>
+                    <div className='flex space-x-4'>
+                        <FormControl size="small" sx={{ minWidth: 150 }}>
+                            <InputLabel id="vehicle-type-filter">Vehicle Type</InputLabel>
+                            <Select
+                                labelId="vehicle-type-filter"
+                                value={vehicleFilter.vehicleType}
+                                onChange={(e) => handleVehicleFilterChange('vehicleType', e.target.value)}
+                                label="Vehicle Type"
+                            >
+                                <MenuItem value="">All Types</MenuItem>
+                                <MenuItem value="car">Car</MenuItem>
+                                <MenuItem value="motorcycle">Motorcycle</MenuItem>
+                                <MenuItem value="truck">Truck</MenuItem>
+                            </Select>
+                        </FormControl>
+                        
+                        <FormControl size="small" sx={{ minWidth: 150 }}>
+                            <InputLabel id="regular-filter">Regular Status</InputLabel>
+                            <Select
+                                labelId="regular-filter"
+                                value={vehicleFilter.isRegular}
+                                onChange={(e) => handleVehicleFilterChange('isRegular', e.target.value)}
+                                label="Regular Status"
+                            >
+                                <MenuItem value="">All</MenuItem>
+                                <MenuItem value="true">Regular</MenuItem>
+                                <MenuItem value="false">Non-Regular</MenuItem>
+                            </Select>
+                        </FormControl>
+                        
+                        <FormControl size="small" sx={{ minWidth: 150 }}>
+                            <InputLabel id="sort-filter">Sort By</InputLabel>
+                            <Select
+                                labelId="sort-filter"
+                                value={vehicleFilter.sort}
+                                onChange={(e) => handleVehicleFilterChange('sort', e.target.value)}
+                                label="Sort By"
+                            >
+                                <MenuItem value="-createdAt">Newest First</MenuItem>
+                                <MenuItem value="createdAt">Oldest First</MenuItem>
+                                <MenuItem value="licensePlate">License Plate (A-Z)</MenuItem>
+                                <MenuItem value="-licensePlate">License Plate (Z-A)</MenuItem>
+                            </Select>
+                        </FormControl>
+                    </div>
+                </div>
+                
+                <TableContainer component={Paper} elevation={0} className="border border-gray-200">
+                    <Table sx={{ minWidth: 650 }} aria-label="vehicles table">
+                        <TableHead>
+                            <TableRow className="bg-gray-50">
+                                <TableCell className="font-bold">License Plate</TableCell>
+                                <TableCell className="font-bold">Vehicle Type</TableCell>
+                                <TableCell className="font-bold">Make</TableCell>
+                                <TableCell className="font-bold">Owner</TableCell>
+                                <TableCell className="font-bold">Regular</TableCell>
+                                <TableCell className="font-bold">Status</TableCell>
+                                <TableCell className="font-bold">Created At</TableCell>
+                                <TableCell className="font-bold">Actions</TableCell>
+                            </TableRow>
+                        </TableHead>
+                        <TableBody>
+                            {vehicleLoading ? (
+                                <TableRow>
+                                    <TableCell colSpan={8} align="center" className="py-8">
+                                        <div className="flex justify-center">
+                                            <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                                        </div>
+                                    </TableCell>
+                                </TableRow>
+                            ) : vehicles.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={8} align="center" className="py-8 text-gray-500">
+                                        No vehicles found
+                                    </TableCell>
+                                </TableRow>
+                            ) : (
+                                vehicles.map((vehicle) => (
+                                    <TableRow key={vehicle._id} hover className="cursor-pointer">
+                                        <TableCell>{vehicle.licensePlate}</TableCell>
+                                        <TableCell>
+                                            <Chip 
+                                                label={vehicle.vehicleType} 
+                                                color={
+                                                    vehicle.vehicleType === 'car' ? 'primary' : 
+                                                    vehicle.vehicleType === 'motorcycle' ? 'secondary' : 
+                                                    'default'
+                                                }
+                                                size="small"
+                                            />
+                                        </TableCell>
+                                        <TableCell>{vehicle.make}</TableCell>
+                                        <TableCell>{vehicle.owner?.name || 'N/A'}</TableCell>
+                                        <TableCell>
+                                            <Chip 
+                                                label={vehicle.isRegular ? 'Regular' : 'Non-Regular'} 
+                                                color={vehicle.isRegular ? 'success' : 'default'}
+                                                size="small"
+                                            />
+                                        </TableCell>
+                                        <TableCell>
+                                            <Chip 
+                                                label={vehicle.isActive ? 'Active' : 'Inactive'} 
+                                                color={vehicle.isActive ? 'success' : 'error'}
+                                                size="small"
+                                            />
+                                        </TableCell>
+                                        <TableCell>{formatDate(vehicle.createdAt)}</TableCell>
+                                        <TableCell>
+                                            <div className="flex space-x-2">
+                                                <Button 
+                                                    variant="outlined" 
+                                                    size="small" 
+                                                    color="primary"
+                                                    onClick={() => window.location.href = `/admin/vehicles/${vehicle._id}`}
+                                                >
+                                                    View
+                                                </Button>
+                                                
+                                                <Tooltip title={vehicle.isActive ? "Deactivate Vehicle" : "Activate Vehicle"}>
+                                                    <IconButton 
+                                                        size="small" 
+                                                        color={vehicle.isActive ? "success" : "error"}
+                                                        disabled={actionLoading[vehicle._id]}
+                                                        onClick={() => handleToggleActiveStatus(vehicle._id, vehicle.isActive)}
+                                                    >
+                                                        {vehicle.isActive ? <CheckCircleIcon /> : <BlockIcon />}
+                                                    </IconButton>
+                                                </Tooltip>
+                                                
+                                                <Tooltip title="Delete Vehicle">
+                                                    <IconButton 
+                                                        size="small" 
+                                                        color="error"
+                                                        disabled={actionLoading[vehicle._id]}
+                                                        onClick={() => handleDeleteVehicle(vehicle._id)}
+                                                    >
+                                                        <DeleteIcon />
+                                                    </IconButton>
+                                                </Tooltip>
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            )}
+                        </TableBody>
+                    </Table>
+                </TableContainer>
+                
+                <Box className="flex justify-center mt-6">
+                    <Pagination 
+                        count={Math.ceil(vehicleTotal / vehicleLimit)} 
+                        page={vehiclePage} 
+                        onChange={handleVehiclePageChange} 
+                        color="primary" 
+                    />
+                </Box>
+            </div>
+            
+            {/* Parking Requests Section */}
+            <div className='mt-12 bg-white rounded-lg shadow-md p-6'>
+                <div className='flex justify-between items-center mb-6'>
+                    <h2 className='text-2xl font-bold text-gray-800'>Parking Requests</h2>
+                </div>
+                
+                {requestsLoading ? (
+                    <div className="flex justify-center items-center py-8">
+                        <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                    </div>
+                ) : parkingRequests.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                        No parking requests found
+                    </div>
+                ) : (
+                    <TableContainer component={Paper} elevation={0} className="border border-gray-200">
+                        <Table sx={{ minWidth: 650 }} aria-label="parking requests table">
+                            <TableHead>
+                                <TableRow className="bg-gray-50">
+                                    <TableCell className="font-bold">Vehicle</TableCell>
+                                    <TableCell className="font-bold">Slot</TableCell>
+                                    <TableCell className="font-bold">Requested By</TableCell>
+                                    <TableCell className="font-bold">Request Time</TableCell>
+                                    <TableCell className="font-bold">Status</TableCell>
+                                    <TableCell className="font-bold">Actions</TableCell>
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {parkingRequests.map((request) => (
+                                    <TableRow key={request._id} hover className="cursor-pointer">
+                                        <TableCell>{request.vehicle?.licensePlate}</TableCell>
+                                        <TableCell>{request.parkingSlot?.slotNumber}</TableCell>
+                                        <TableCell>{request.requestedBy?.name || 'N/A'}</TableCell>
+                                        <TableCell>{formatDate(request.requestTime)}</TableCell>
+                                        <TableCell>
+                                            <Chip 
+                                                label={request.status} 
+                                                color={
+                                                    request.status === 'pending' ? 'warning' : 
+                                                    request.status === 'approved' ? 'success' : 
+                                                    request.status === 'rejected' ? 'error' : 
+                                                    'default'
+                                                }
+                                                size="small"
+                                            />
+                                        </TableCell>
+                                        <TableCell>
+                                            {request.status === 'pending' && (
+                                                <div className="flex space-x-2">
+                                                    <Button 
+                                                        variant="contained" 
+                                                        size="small" 
+                                                        color="success"
+                                                        disabled={requestActionLoading[request._id]}
+                                                        onClick={() => handleApproveRequest(request._id)}
+                                                    >
+                                                        Approve
+                                                    </Button>
+                                                    <Button 
+                                                        variant="outlined" 
+                                                        size="small" 
+                                                        color="error"
+                                                        disabled={requestActionLoading[request._id]}
+                                                        onClick={() => openRejectModal(request)}
+                                                    >
+                                                        Reject
+                                                    </Button>
+                                                </div>
+                                            )}
+                                            {request.status === 'approved' && (
+                                                <Chip 
+                                                    label="Session Created" 
+                                                    color="success" 
+                                                    size="small"
+                                                />
+                                            )}
+                                            {request.status === 'rejected' && (
+                                                <Tooltip title={request.reason || 'No reason provided'}>
+                                                    <Chip 
+                                                        label="Rejected" 
+                                                        color="error" 
+                                                        size="small"
+                                                    />
+                                                </Tooltip>
+                                            )}
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </TableContainer>
+                )}
+            </div>
+            
+            {/* Reject Modal */}
+            <Modal
+                open={isRejectModalOpen}
+                onClose={closeRejectModal}
+                aria-labelledby="reject-modal-title"
+                aria-describedby="reject-modal-description"
+            >
+                <Box sx={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    width: 400,
+                    bgcolor: 'background.paper',
+                    boxShadow: 24,
+                    p: 4,
+                    borderRadius: 2
+                }}>
+                    <Typography id="reject-modal-title" variant="h6" component="h2" gutterBottom>
+                        Reject Parking Request
+                    </Typography>
+                    <Typography id="reject-modal-description" sx={{ mb: 2 }}>
+                        Please provide a reason for rejecting this request:
+                    </Typography>
+                    <TextField
+                        fullWidth
+                        multiline
+                        rows={3}
+                        label="Reason"
+                        value={rejectReason}
+                        onChange={(e) => setRejectReason(e.target.value)}
+                        sx={{ mb: 3 }}
+                    />
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
+                        <Button 
+                            variant="outlined" 
+                            onClick={closeRejectModal}
+                        >
+                            Cancel
+                        </Button>
+                        <Button 
+                            variant="contained" 
+                            color="error"
+                            disabled={!rejectReason.trim() || requestActionLoading[selectedRequest?._id]}
+                            onClick={() => handleRejectRequest(selectedRequest?._id)}
+                        >
+                            Reject Request
+                        </Button>
+                    </Box>
+                </Box>
+            </Modal>
             
             {/* Parking Sessions Table */}
             <div className='mt-8 bg-white rounded-lg shadow-md'>
@@ -272,7 +913,7 @@ function Admin() {
                                                     </span>
                                                 </td>
                                                 <td className='px-6 py-4 whitespace-nowrap'>
-                                                    ${session.amount}
+                                                    ₹{session.amount || 0}
                                                 </td>
                                                 <td className='px-6 py-4 whitespace-nowrap'>
                                                     {session.status === 'active' && (
